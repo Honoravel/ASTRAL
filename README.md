@@ -201,3 +201,12 @@ Presumidas na implementação, a confirmar:
 | 4 | 21,2 | 18–25 | 1,1 | 0,10 | 0,3 |
 
 Com 4 jogadores a IA arma cerca de 7 armadilhas por partida e perto de 5 disparam.
+
+## Referência
+
+Todas as correspondências (valores, cartas, casas, efeitos, deuses e signos) estão em
+[`docs/REFERENCIA.md`](docs/REFERENCIA.md), gerado a partir do motor:
+
+```bash
+npm run reference
+```
