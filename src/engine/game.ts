@@ -30,7 +30,7 @@ export function newGame(configs: PlayerConfig[], seed: number = Date.now() | 0):
     oracle: { holder: null, weaveUsed: false, protectUsed: false },
     queue: [], pending: null, answer: null,
     log: [], winner: null, seed, goal: RULES.goal,
-    stats: { duels: 0, jails: configs.map(() => 0) },
+    stats: { duels: 0, jails: configs.map(() => 0), moves: 0, effects: 0, temples: 0 },
     lastMove: null,
     traps: [], trapSeq: 0, lastTrap: null, globalEvent: null, elections: [],
   };
@@ -179,7 +179,7 @@ export function costFor(p: Player, card: Card, state?: GameState): number {
   let cost = card.cost;
   if (ELEMENT_SUIT[SIGNS[p.sign].element] === card.suit) cost--;
   // Descontos de carta e relíquia não acumulam entre si: vale o maior.
-  cost -= Math.max(p.discountNext ? 1 : 0, martelo(p, card) ? RULES.hammerDiscount : 0, p.divineDiscount && card.use === 'D' ? RULES.refineDiscount : 0);
+  cost -= Math.max(p.discountNext ? RULES.pageDiscount : 0, martelo(p, card) ? RULES.hammerDiscount : 0, p.divineDiscount && card.use === 'D' ? RULES.refineDiscount : 0);
   cost = Math.max(0, cost);
   // Conselho de Atena: nunca torna gratuita uma carta que custa ao menos 1.
   if (state && event(state, EV.atena) && card.suit === 'Espadas' && !p.used.atena && cost >= 2) cost--;
@@ -374,6 +374,7 @@ function playEffect(state: GameState, p: Player, cardId: number): Op[] {
   else if (martelo(p, card)) p.used.martelo = 1;
   else p.discountNext = false;
   discardCard(state, p, cardId);
+  state.stats.effects++;
   say(state, p.id, `${p.name} joga ${cardName(card)}: ${card.text}`);
   return effectOps(cardId, p.id);
 }
@@ -533,6 +534,7 @@ function judgement(state: GameState, p: Player): Op[] {
 /** Efeito de parada da casa onde o movimento terminou. */
 function land(state: GameState, p: Player): Op[] {
   const node = NODES[p.pos];
+  if (node.type === 'templo') state.stats.temples++;
   track(state, p, 'stopRegion', node.region);
   const id = p.id;
   const ops: Op[] = [];
@@ -848,7 +850,16 @@ function exec(state: GameState, op: Op): Op[] | null {
       let nodes: number[];
       if (op.t === 'advance') {
         const set = new Set<number>();
-        for (let k = op.min; k <= op.max; k++) for (const n of k === 0 ? [who.pos] : reach(who.pos, k).keys()) set.add(n);
+        if (op.normal) {
+          // Rota normal: segue sempre a saída principal, sem atalhos nem retornos.
+          let at = who.pos;
+          for (let k = 1; k <= op.max; k++) {
+            at = NODES[at].next[0];
+            if (k >= op.min) set.add(at);
+          }
+        } else {
+          for (let k = op.min; k <= op.max; k++) for (const n of k === 0 ? [who.pos] : reach(who.pos, k).keys()) set.add(n);
+        }
         nodes = [...set];
       } else if (op.kind === 'next') {
         nodes = COMMON.filter((n) => NODES[n].region === (NODES[who.pos].region + 1) % 12);
@@ -888,7 +899,12 @@ function exec(state: GameState, op: Op): Op[] | null {
       return [];
     case 'paus9': {
       const p = P(op.p);
-      change(p, 'gloria', p.hubris >= 3 ? 3 : 2);
+      if (p.hubris >= 3) {
+        change(p, 'gloria', 3);
+        change(p, 'hubris', 1);
+      } else {
+        change(p, 'gloria', 2);
+      }
       return [];
     }
     case 'behind': {
@@ -1198,6 +1214,7 @@ export function apply(state: GameState, cmd: Command): void {
       if (mod !== 0) p.used.sandals = 1;
       discardCard(state, p, cmd.card);
       const from = p.pos;
+      state.stats.moves++;
       const move = walk(state, p, path);
       const node = NODES[p.pos];
       say(state, p.id, `${p.name} descarta ${cardName(CARDS[cmd.card])} e anda ${path.length} da casa ${pad(from)} até a ${pad(node.id)} (${GODS[node.region].name}).`);
@@ -1297,6 +1314,7 @@ export const serialize = (state: GameState): string => JSON.stringify(state);
 /** Carrega uma partida salva, migrando versões anteriores. */
 export function deserialize(json: string): GameState {
   const state = JSON.parse(json) as GameState;
+  if (state.stats) state.stats = Object.assign({ moves: 0, effects: 0, temples: 0 }, state.stats);
   if (state.version === 1) {
     // v1 → v2 (regras v1.6): as casas mudaram de efeito, mas IDs e ligações são os mesmos.
     state.lastMove = null;

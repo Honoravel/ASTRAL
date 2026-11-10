@@ -72,7 +72,7 @@ export type Op =
   | { t: 'peek'; p: number; deck: 'minor' | 'destiny'; n: number; reorder: boolean }
   | { t: 'viewHand'; p: number; of: number }
   | { t: 'swap'; p: number; of: number }
-  | { t: 'advance'; p: number; who: number; min: number; max: number }
+  | { t: 'advance'; p: number; who: number; min: number; max: number; normal?: boolean }
   | { t: 'teleport'; p: number; kind: 'common' | 'adjacent' | 'next' }
   | { t: 'jail'; p: number }
   | { t: 'release'; p: number }
@@ -223,7 +223,7 @@ export interface GameState {
   seed: number;
   goal: number;
   /** Estatísticas para telemetria de balanceamento. */
-  stats: { duels: number; jails: number[] };
+  stats: { duels: number; jails: number[]; moves: number; effects: number; temples: number };
   lastMove: MovementResult | null;
   /** Armadilhas ativas. Só o dono deve vê-las. */
   traps: TrapState[];

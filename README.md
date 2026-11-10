@@ -167,14 +167,19 @@ Dinheiro mais importante, Glória mais cara e mais risco nas ações poderosas.
 Movimento por carta: Ás 1 · 2 a 6 pelo valor · 7, 8 e 9 andam 3 · 10 anda 4 · Pajem 2 · Cavaleiro 5 ·
 Rainha 3 · Rei 4. São 20 cartas de 3 passos, 12 de 4, 8 de 2, 8 de 5, 4 de 1 e 4 de 6.
 
-Cartas de Glória pedidas: Ás de Paus 4 · 4 de Paus 8 · 7 de Paus 10 · 10 de Paus 14 (+3 Húbris) ·
-Rei de Paus 18 (+3 Húbris) · Rei de Copas 15 (+2 Húbris) · Rei de Espadas 11 · Rei de Ouros 12.
+Catálogo das 56 cartas: custos e efeitos seguem a tabela "original → proposto" do autor, e estão
+listados em `docs/REFERENCIA.md` (seção 13). Pontos de integração:
 
-Extrapolações (não estavam no pedido; feitas para manter a mesma escala):
+- **Movimento**: mantido como está no motor (a distribuição concentrada em 3 passos), não a coluna
+  "Mov. na referência" do catálogo, que era da versão anterior.
+- **Rota normal**: o Cavaleiro de Copas (3 casas) e o Cavaleiro de Ouros (2 casas) seguem sempre a
+  saída principal, sem atalhos nem retornos, e sem escolha de destino.
+- **4 de Espadas** passou a contar como sabotagem (interferência).
+- **Pajem de Espadas**: −3 na próxima carta de efeito. Não acumula com Martelo nem Aprimoramento.
+- **Sem permanentes** nas cartas: a função fica nas relíquias e nos investimentos.
 
-- **Demais cartas de Glória**, que ficariam muito mais baratas que as corrigidas: 8 e 9 de Paus 8,
-  Rainha de Paus 8, 9 de Copas 5, 10 de Copas 8, Rainha de Copas 9, 8 de Espadas 6, 10 de Espadas 8,
-  Rainha de Espadas 8, 9 de Ouros 8, Cavaleiro de Ouros 7, Rainha de Ouros 10.
+Extrapolações (não estavam nos pedidos; feitas para manter a mesma escala):
+
 - **Custos de templo** subiram para a faixa de 3 a 5 Dracmas (8 a 10 nas ações fortes); ganhos de
   templo, tesouros, duelos, armadilhas e eventos subiram na mesma proporção.
 - **Eleição**: após a votação, cada jogador perde metade do Favor, arredondada para baixo.
@@ -230,13 +235,14 @@ Presumidas na implementação, a confirmar:
 - Foice rende no início de cada rodada a partir da segunda; Cinto rende ao fim das rodadas 3, 6, 9…
 - "Teletransportar até N casas adiante" permite ficar onde está.
 
-## Telemetria (IA × IA, 150 partidas, após o rebalanceamento)
+## Telemetria (IA × IA, 150 partidas, meta de 30 Glórias, catálogo rebalanceado)
 
-| Jogadores | Meta | Rodadas (média) | p10–p90 | Duelos/partida | Prisões/jogador | Relíquias/jogador |
-|---|---|---|---|---|---|---|
-| 2 | 30 | 34,3 | 29–41 | 0,6 | 0,18 | 0,8 |
-| 4 | 30 | 33,3 | 28–39 | 3,3 | 0,15 | 0,6 |
-| 4 | 25 | 27,0 | 23–32 | — | — | — |
+| Jogadores | Rodadas (média) | p10–p90 | Duelos/partida | Prisões/jogador | Relíquias/jogador | Cartas por efeito | Templos/jogador |
+|---|---|---|---|---|---|---|---|
+| 2 | 35,5 | 30–42 | 0,7 | 0,19 | 0,7 | 19% | 7,7 |
+| 4 | 35,3 | 30–41 | 3,4 | 0,21 | 0,6 | 20% | 7,4 |
+
+Os jogadores terminam com cerca de 7 Dracmas cada: não há acúmulo de dinheiro.
 
 ## Referência
 

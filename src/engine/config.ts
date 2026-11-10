@@ -53,6 +53,8 @@ export const RULES = {
   warPrep: 4,
   refine: 5,
   refineDiscount: 3,
+  /** Pajem de Espadas: desconto na próxima carta de efeito. */
+  pageDiscount: 3,
   ecstasy: 8,
   casinoStep: 2,
   sellGlory: 10,

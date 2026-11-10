@@ -336,75 +336,75 @@ Cada carta serve para **mover** (descarta e anda exatamente o movimento) ou para
 | Carta | Mov. | Custo | Uso | Templos onde o efeito vale | Efeito | Sabotagem |
 |---|---|---|---|---|---|---|
 | Ás de Paus | 1 | 4 | Universal | Qualquer casa | Ganhe 1 Glória. | — |
-| 2 de Paus | 2 | 1 | Universal | Qualquer casa | Ganhe 2 Dracmas e 1 Húbris. | — |
-| 3 de Paus | 3 | 1 | Universal | Qualquer casa | Transfira até 1 Dracma de um adversário para você. | roubo |
+| 2 de Paus | 2 | 2 | Universal | Qualquer casa | Ganhe 5 Dracmas e 1 Húbris. | — |
+| 3 de Paus | 3 | 3 | Universal | Qualquer casa | Roube até 3 Dracmas de um rival; +1 Húbris. | roubo |
 | 4 de Paus | 4 | 8 | Universal | Qualquer casa | Ganhe 2 Glórias e 1 Húbris. | — |
-| 5 de Paus | 5 | 2 | Universal | Qualquer casa | Um adversário perde até 1 Favor; você ganha 1 Húbris. | politica |
-| 6 de Paus | 6 | 2 | Universal | Qualquer casa | Ganhe 3 Dracmas e 1 Húbris. | — |
+| 5 de Paus | 5 | 4 | Universal | Qualquer casa | Um rival perde até 2 Favores; você recebe 1 Húbris. | politica |
+| 6 de Paus | 6 | 3 | Universal | Qualquer casa | Ganhe 7 Dracmas e 2 Húbris. | — |
 | 7 de Paus | 3 | 10 | Elemental | Zeus, Ares, Hefesto | Ganhe 3 Glórias e 2 Húbris. | — |
-| 8 de Paus | 3 | 8 | Elemental | Zeus, Ares, Hefesto | Ganhe 2 Glórias; adversário perde até 1 Glória. | ataque |
-| 9 de Paus | 3 | 8 | Elemental | Zeus, Ares, Hefesto | Ganhe 2 Glórias; com 3+ Húbris, ganhe mais 1. | — |
+| 8 de Paus | 3 | 9 | Elemental | Zeus, Ares, Hefesto | Ganhe 1 Glória; um rival perde até 1 Glória; +1 Húbris. | ataque |
+| 9 de Paus | 3 | 8 | Elemental | Zeus, Ares, Hefesto | Ganhe 2 Glórias; se tiver 3+ Húbris, ganhe mais 1 e receba +1 Húbris. | — |
 | 10 de Paus | 4 | 14 | Elemental | Zeus, Ares, Hefesto | Ganhe 4 Glórias e 3 Húbris. | — |
-| Pajem de Paus | 2 | 2 | Elemental | Zeus, Ares, Hefesto, Ártemis | Remova 1 Húbris ou ganhe 1 Dracma. | — |
-| Cavaleiro de Paus | 5 | 3 | Divina: Ares | Ares, Ártemis | Roube até 3 Dracmas; ganhe 1 Húbris. | roubo |
-| Rainha de Paus | 3 | 8 | Divina: Hefesto | Hefesto | Ganhe 2 Glórias e um escudo para a próxima perda de Glória. | — |
+| Pajem de Paus | 2 | 3 | Elemental | Zeus, Ares, Hefesto, Ártemis | Remova até 2 Húbris ou ganhe 4 Dracmas. | — |
+| Cavaleiro de Paus | 5 | 6 | Divina: Ares | Ares, Ártemis | Roube até 5 Dracmas de um rival; +2 Húbris. | roubo |
+| Rainha de Paus | 3 | 10 | Divina: Hefesto | Hefesto | Ganhe 2 Glórias e um escudo contra a próxima perda de Glória. | — |
 | Rei de Paus | 4 | 18 | Divina: Zeus | Zeus | Ganhe 5 Glórias e 3 Húbris. | — |
 
 ### Copas — Água
 
 | Carta | Mov. | Custo | Uso | Templos onde o efeito vale | Efeito | Sabotagem |
 |---|---|---|---|---|---|---|
-| Ás de Copas | 1 | 0 | Universal | Qualquer casa | Ganhe 1 Favor. | — |
-| 2 de Copas | 2 | 1 | Universal | Qualquer casa | Remova 1 Húbris. | — |
-| 3 de Copas | 3 | 1 | Universal | Qualquer casa | Ganhe 2 Dracmas. | — |
-| 4 de Copas | 4 | 2 | Universal | Qualquer casa | Ganhe 2 Favores. | — |
-| 5 de Copas | 5 | 2 | Universal | Qualquer casa | Remova até 2 Húbris. | — |
-| 6 de Copas | 6 | 2 | Universal | Qualquer casa | Ganhe 1 Favor e 1 Dracma. | — |
-| 7 de Copas | 3 | 3 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 3 Favores. | — |
-| 8 de Copas | 3 | 3 | Elemental | Dionísio, Afrodite, Poseidon | Remova até 3 Húbris e ganhe 1 Favor. | — |
-| 9 de Copas | 3 | 5 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 2 Favores e 1 Glória. | — |
-| 10 de Copas | 4 | 8 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 2 Glórias e remova até 2 Húbris. | — |
-| Pajem de Copas | 2 | 2 | Elemental | Dionísio, Afrodite, Poseidon | Compre 1 carta e descarte 1. | — |
-| Cavaleiro de Copas | 5 | 3 | Divina: Poseidon | Poseidon | Mova um adversário até 3 casas adiante, sem ativar o destino. | deslocamento |
-| Rainha de Copas | 3 | 9 | Divina: Afrodite | Afrodite, Hera | Ganhe 2 Favores e 2 Glórias. | — |
-| Rei de Copas | 4 | 15 | Divina: Dionísio | Dionísio, Poseidon | Ganhe 4 Glórias e 2 Húbris. | — |
+| Ás de Copas | 1 | 2 | Universal | Qualquer casa | Ganhe 2 Favores. | — |
+| 2 de Copas | 2 | 3 | Universal | Qualquer casa | Remova até 2 Húbris. | — |
+| 3 de Copas | 3 | 2 | Universal | Qualquer casa | Ganhe 5 Dracmas. | — |
+| 4 de Copas | 4 | 4 | Universal | Qualquer casa | Ganhe 3 Favores. | — |
+| 5 de Copas | 5 | 5 | Universal | Qualquer casa | Remova até 3 Húbris; compre 1 carta e descarte 1. | — |
+| 6 de Copas | 6 | 3 | Universal | Qualquer casa | Ganhe 2 Favores e 2 Dracmas. | — |
+| 7 de Copas | 3 | 6 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 4 Favores. | — |
+| 8 de Copas | 3 | 6 | Elemental | Dionísio, Afrodite, Poseidon | Remova até 4 Húbris e ganhe 1 Favor. | — |
+| 9 de Copas | 3 | 8 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 2 Favores e 1 Glória. | — |
+| 10 de Copas | 4 | 9 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 2 Glórias e remova até 2 Húbris. | — |
+| Pajem de Copas | 2 | 3 | Elemental | Dionísio, Afrodite, Poseidon | Compre 2 cartas e descarte 2. | — |
+| Cavaleiro de Copas | 5 | 6 | Divina: Poseidon | Poseidon | Desloque um rival 3 casas pela rota normal, sem ativar casas atravessadas nem a chegada. | deslocamento |
+| Rainha de Copas | 3 | 10 | Divina: Afrodite | Afrodite, Hera | Ganhe 2 Favores e 2 Glórias. | — |
+| Rei de Copas | 4 | 15 | Divina: Dionísio | Dionísio, Poseidon | Ganhe 4 Glórias e 2 Húbris; remova 1 Húbris após a resolução. | — |
 
 ### Espadas — Ar
 
 | Carta | Mov. | Custo | Uso | Templos onde o efeito vale | Efeito | Sabotagem |
 |---|---|---|---|---|---|---|
-| Ás de Espadas | 1 | 0 | Universal | Qualquer casa | Olhe 2 cartas do baralho de jogadores e reorganize. | — |
-| 2 de Espadas | 2 | 1 | Universal | Qualquer casa | Compre 1 carta e descarte 1. | — |
-| 3 de Espadas | 3 | 1 | Universal | Qualquer casa | Ganhe 1 Favor. | — |
-| 4 de Espadas | 4 | 2 | Universal | Qualquer casa | Veja a mão de um adversário. | — |
-| 5 de Espadas | 5 | 2 | Universal | Qualquer casa | Troque 1 carta sua por 1 aleatória de um adversário. | interferencia |
-| 6 de Espadas | 6 | 2 | Universal | Qualquer casa | Olhe 3 cartas do Destino e reorganize. | — |
-| 7 de Espadas | 3 | 3 | Elemental | Apolo, Atena, Hermes | Compre 2 cartas e descarte 2. | — |
-| 8 de Espadas | 3 | 6 | Elemental | Apolo, Atena, Hermes | Ganhe 2 Glórias se estiver atrás do líder; caso contrário, 1. | — |
-| 9 de Espadas | 3 | 3 | Elemental | Apolo, Atena, Hermes | Olhe 4 cartas do Destino e reorganize. | — |
-| 10 de Espadas | 4 | 8 | Elemental | Apolo, Atena, Hermes | Ganhe 2 Glórias e 1 Favor. | — |
-| Pajem de Espadas | 2 | 2 | Elemental | Apolo, Atena, Hermes | Sua próxima carta de efeito custa −1 Dracma. | — |
-| Cavaleiro de Espadas | 5 | 3 | Divina: Hermes | Hermes, Ares | Teletransporte-se para qualquer casa comum. | — |
-| Rainha de Espadas | 3 | 8 | Divina: Atena | Atena | Ganhe 2 Glórias; compre 2 cartas e descarte 2. | — |
-| Rei de Espadas | 4 | 11 | Divina: Apolo | Apolo, Atena | Ganhe 3 Glórias e veja 3 cartas do Destino. | — |
+| Ás de Espadas | 1 | 2 | Universal | Qualquer casa | Veja as 3 próximas cartas do Destino e reorganize-as. | — |
+| 2 de Espadas | 2 | 2 | Universal | Qualquer casa | Compre 2 cartas e descarte 2. | — |
+| 3 de Espadas | 3 | 2 | Universal | Qualquer casa | Ganhe 2 Favores. | — |
+| 4 de Espadas | 4 | 3 | Universal | Qualquer casa | Veja a mão de um rival; ele descarta 1 carta aleatória e compra 1. | interferencia |
+| 5 de Espadas | 5 | 4 | Universal | Qualquer casa | Troque uma carta sua por uma carta aleatória de um rival. | interferencia |
+| 6 de Espadas | 6 | 4 | Universal | Qualquer casa | Veja 4 cartas do Destino e reorganize-as. | — |
+| 7 de Espadas | 3 | 5 | Elemental | Apolo, Atena, Hermes | Compre 3 cartas e descarte 3. | — |
+| 8 de Espadas | 3 | 7 | Elemental | Apolo, Atena, Hermes | Ganhe 2 Glórias se estiver atrás do líder; caso contrário, 1 Glória. | — |
+| 9 de Espadas | 3 | 5 | Elemental | Apolo, Atena, Hermes | Olhe 5 cartas do Destino e reorganize-as; ganhe 1 Favor. | — |
+| 10 de Espadas | 4 | 9 | Elemental | Apolo, Atena, Hermes | Ganhe 2 Glórias e 2 Favores. | — |
+| Pajem de Espadas | 2 | 3 | Elemental | Apolo, Atena, Hermes | Sua próxima carta de efeito custa 3 Dracmas a menos (mínimo 0). | — |
+| Cavaleiro de Espadas | 5 | 7 | Divina: Hermes | Hermes, Ares | Teletransporte-se para qualquer casa comum; não ativa passagem nem parada. | — |
+| Rainha de Espadas | 3 | 10 | Divina: Atena | Atena | Ganhe 2 Glórias; compre 2 cartas e descarte 2. | — |
+| Rei de Espadas | 4 | 11 | Divina: Apolo | Apolo, Atena | Ganhe 3 Glórias e veja as 3 próximas cartas do Destino. | — |
 
 ### Ouros — Terra
 
 | Carta | Mov. | Custo | Uso | Templos onde o efeito vale | Efeito | Sabotagem |
 |---|---|---|---|---|---|---|
-| Ás de Ouros | 1 | 0 | Universal | Qualquer casa | Ganhe 2 Dracmas. | — |
-| 2 de Ouros | 2 | 1 | Universal | Qualquer casa | Ganhe 3 Dracmas. | — |
-| 3 de Ouros | 3 | 1 | Universal | Qualquer casa | Ganhe 1 Dracma e 1 Favor. | — |
-| 4 de Ouros | 4 | 2 | Universal | Qualquer casa | Ganhe 4 Dracmas. | — |
-| 5 de Ouros | 5 | 2 | Universal | Qualquer casa | Ganhe 3 Dracmas e remova 1 Húbris. | — |
-| 6 de Ouros | 6 | 2 | Universal | Qualquer casa | Ganhe 5 Dracmas. | — |
-| 7 de Ouros | 3 | 3 | Elemental | Hera, Ártemis, Deméter | Ganhe 6 Dracmas. | — |
-| 8 de Ouros | 3 | 3 | Elemental | Hera, Ártemis, Deméter, Hefesto | Ganhe 4 Dracmas e 1 Favor. | — |
-| 9 de Ouros | 3 | 8 | Elemental | Hera, Ártemis, Deméter | Ganhe 2 Glórias e 3 Dracmas. | — |
-| 10 de Ouros | 4 | 3 | Elemental | Hera, Ártemis, Deméter | Ganhe 7 Dracmas. | — |
-| Pajem de Ouros | 2 | 2 | Elemental | Hera, Ártemis, Deméter | Ganhe 2 Dracmas; compre 1 carta e descarte 1. | — |
-| Cavaleiro de Ouros | 5 | 7 | Divina: Ártemis | Ártemis, Hermes | Ganhe 2 Glórias; teletransporte-se até 2 casas adiante. | — |
-| Rainha de Ouros | 3 | 10 | Divina: Deméter | Deméter, Hera | Ganhe 6 Dracmas e 2 Glórias. | — |
+| Ás de Ouros | 1 | 2 | Universal | Qualquer casa | Ganhe 5 Dracmas. | — |
+| 2 de Ouros | 2 | 2 | Universal | Qualquer casa | Ganhe 6 Dracmas. | — |
+| 3 de Ouros | 3 | 2 | Universal | Qualquer casa | Ganhe 4 Dracmas e 1 Favor. | — |
+| 4 de Ouros | 4 | 3 | Universal | Qualquer casa | Ganhe 8 Dracmas. | — |
+| 5 de Ouros | 5 | 4 | Universal | Qualquer casa | Ganhe 7 Dracmas e remova 1 Húbris. | — |
+| 6 de Ouros | 6 | 4 | Universal | Qualquer casa | Ganhe 9 Dracmas. | — |
+| 7 de Ouros | 3 | 5 | Elemental | Hera, Ártemis, Deméter | Ganhe 10 Dracmas. | — |
+| 8 de Ouros | 3 | 5 | Elemental | Hera, Ártemis, Deméter, Hefesto | Ganhe 8 Dracmas e 1 Favor. | — |
+| 9 de Ouros | 3 | 9 | Elemental | Hera, Ártemis, Deméter | Ganhe 2 Glórias e 6 Dracmas. | — |
+| 10 de Ouros | 4 | 6 | Elemental | Hera, Ártemis, Deméter | Ganhe 12 Dracmas. | — |
+| Pajem de Ouros | 2 | 3 | Elemental | Hera, Ártemis, Deméter | Ganhe 5 Dracmas; compre 1 carta e descarte 1. | — |
+| Cavaleiro de Ouros | 5 | 8 | Divina: Ártemis | Ártemis, Hermes | Ganhe 2 Glórias; teletransporte-se 2 casas pela rota normal, sem ativar a chegada. | — |
+| Rainha de Ouros | 3 | 10 | Divina: Deméter | Deméter, Hera | Ganhe 8 Dracmas e 2 Glórias. | — |
 | Rei de Ouros | 4 | 12 | Divina: Hera | Hera, Hefesto | Ganhe 3 Glórias e 2 Favores; remova 1 Húbris. | — |
 
 ## 14. Afinidades de cartas por templo
@@ -469,12 +469,13 @@ Cartas existentes que contam como sabotagem:
 
 | Carta | Tipo | Efeito |
 |---|---|---|
-| 3 de Paus | roubo | Transfira até 1 Dracma de um adversário para você. |
-| 5 de Paus | politica | Um adversário perde até 1 Favor; você ganha 1 Húbris. |
-| 8 de Paus | ataque | Ganhe 2 Glórias; adversário perde até 1 Glória. |
-| Cavaleiro de Paus | roubo | Roube até 3 Dracmas; ganhe 1 Húbris. |
-| Cavaleiro de Copas | deslocamento | Mova um adversário até 3 casas adiante, sem ativar o destino. |
-| 5 de Espadas | interferencia | Troque 1 carta sua por 1 aleatória de um adversário. |
+| 3 de Paus | roubo | Roube até 3 Dracmas de um rival; +1 Húbris. |
+| 5 de Paus | politica | Um rival perde até 2 Favores; você recebe 1 Húbris. |
+| 8 de Paus | ataque | Ganhe 1 Glória; um rival perde até 1 Glória; +1 Húbris. |
+| Cavaleiro de Paus | roubo | Roube até 5 Dracmas de um rival; +2 Húbris. |
+| Cavaleiro de Copas | deslocamento | Desloque um rival 3 casas pela rota normal, sem ativar casas atravessadas nem a chegada. |
+| 4 de Espadas | interferencia | Veja a mão de um rival; ele descarta 1 carta aleatória e compra 1. |
+| 5 de Espadas | interferencia | Troque uma carta sua por uma carta aleatória de um rival. |
 
 Sabotagens diretas (desligado, aguardando aprovação do design):
 

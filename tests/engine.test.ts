@@ -90,8 +90,12 @@ describe('cartas', () => {
     expect(['U', 'E', 'D'].map((u) => CARDS.filter((c) => c.use === u).length)).toEqual([24, 20, 12]);
     expect(CARDS.slice(0, 14).map((c) => c.move)).toEqual([1, 2, 3, 4, 5, 6, 3, 3, 3, 4, 2, 5, 3, 4]);
     expect(CARDS.filter((c) => c.move === 3)).toHaveLength(20); // movimento concentrado em 3 passos
-    expect(CARDS.slice(0, 14).map((c) => c.cost)).toEqual([4, 1, 1, 8, 2, 2, 10, 8, 8, 14, 2, 3, 8, 18]); // cartas de Glória rebalanceadas
-    expect([27, 41, 55].map((id) => CARDS[id].cost)).toEqual([15, 11, 12]);
+    expect(CARDS.slice(0, 14).map((c) => c.cost)).toEqual([4, 2, 3, 8, 4, 3, 10, 9, 8, 14, 3, 6, 10, 18]);
+    expect(CARDS.slice(14, 28).map((c) => c.cost)).toEqual([2, 3, 2, 4, 5, 3, 6, 6, 8, 9, 3, 6, 10, 15]);
+    expect(CARDS.slice(28, 42).map((c) => c.cost)).toEqual([2, 2, 2, 3, 4, 4, 5, 7, 5, 9, 3, 7, 10, 11]);
+    expect(CARDS.slice(42, 56).map((c) => c.cost)).toEqual([2, 2, 2, 3, 4, 4, 5, 5, 9, 6, 3, 8, 10, 12]);
+    // Toda carta que dá 2 ou mais Glórias custa ao menos 7 Dracmas.
+    for (const c of CARDS) if (/Ganhe [2-5] Glórias/.test(c.text)) expect(c.cost, c.text).toBeGreaterThanOrEqual(7);
     expect(new Set(CARDS.filter((c) => c.use === 'D').map((c) => c.god)).size).toBe(12);
     expect(DESTINIES).toHaveLength(22);
   });
@@ -101,7 +105,11 @@ describe('cartas', () => {
     const leo = g.players[0]; // Leão, fogo → Paus
     expect(costFor(leo, CARDS[13])).toBe(17);
     expect(costFor(leo, CARDS[27])).toBe(15);
+    expect(costFor(leo, CARDS[1])).toBe(1); // 2 de Paus: 2 − 1
+    expect(costFor(leo, CARDS[14])).toBe(2); // Ás de Copas: outro elemento, sem desconto
+    leo.discountNext = true; // Pajem de Espadas: −3, sem ficar negativo
     expect(costFor(leo, CARDS[1])).toBe(0);
+    expect(costFor(leo, CARDS[13])).toBe(14);
   });
 
   it('resolve o efeito de todas as 56 cartas sem deixar recursos negativos', () => {
@@ -636,7 +644,7 @@ describe('sistemas estratégicos v1.9', () => {
     expect(sabotageTargets(g, 0)).toEqual([2]);
     a.hand = [4, 2, 0, 1, 3, 5]; // 5 de Paus (−1 Favor) e 3 de Paus (roubo)
     apply(g, { type: 'PLAY_CARD_EFFECT', card: 4 });
-    expect(c.favor).toBe(2);
+    expect(c.favor).toBe(1); // perde até 2 Favores
     expect(c.used.sabIn).toBe(1);
     c.used.sabIn = RULES.sabotageInPerRound;
     g.current = 0;
@@ -735,10 +743,13 @@ describe('sistemas estratégicos v1.9', () => {
 
     g = on(EV.atena);
     const leo = g.players[0];
-    expect(costFor(leo, CARDS[34], g)).toBe(2); // 7 de Espadas: 3 → 2
-    expect(costFor(leo, CARDS[29], g)).toBe(1); // 2 de Espadas: custa 1 e não fica gratuita
+    expect(costFor(leo, CARDS[34], g)).toBe(4); // 7 de Espadas: 5 → 4
+    expect(costFor(leo, CARDS[29], g)).toBe(1); // 2 de Espadas: 2 → 1
+    leo.discountNext = true;
+    expect(costFor(leo, CARDS[32], g)).toBe(1); // 5 de Espadas: 4 − 3 = 1 e não fica gratuita
+    leo.discountNext = false;
     leo.used.atena = 1;
-    expect(costFor(leo, CARDS[34], g)).toBe(3);
+    expect(costFor(leo, CARDS[34], g)).toBe(5);
 
     g = on(EV.zeus);
     Object.assign(g.players[0], { hubris: 5, dracmas: 3 });
@@ -796,6 +807,102 @@ describe('sistemas estratégicos v1.9', () => {
     aiStep(h);
     expect(h.lastMove ? h.lastMove.destination : -1).toBe(chosen);
     expect(before).toContain('"traps":[]');
+  });
+});
+
+describe('catálogo de cartas rebalanceado', () => {
+  const play = (card: number, setup: (g: GameState) => void = () => {}, n = 2): GameState => {
+    const g = game(n);
+    const p = g.players[0];
+    Object.assign(p, { dracmas: 30, hand: [card, ...p.hand.filter((c) => c !== card).slice(0, 5)] });
+    setup(g);
+    apply(g, { type: 'PLAY_CARD_EFFECT', card });
+    return g;
+  };
+
+  it('cobra o custo e aplica os novos efeitos de recursos', () => {
+    let g = play(47); // 6 de Ouros: 4 → +9 Dracmas (Leão não tem desconto em Ouros)
+    expect(g.players[0].dracmas).toBe(30 - 4 + 9);
+    g = play(1); // 2 de Paus com desconto do signo: 1 → +5 Dracmas, +1 Húbris
+    expect(g.players[0]).toMatchObject({ dracmas: 30 - 1 + 5, hubris: 1 });
+    g = play(20, (s) => (s.players[0].pos = templeOf(G.afrodite))); // 7 de Copas: +4 Favores
+    expect(g.players[0].favor).toBe(RULES.startFavor + 4);
+    g = play(8, (s) => Object.assign(s.players[0], { pos: templeOf(G.ares), hubris: 3 })); // 9 de Paus com 3+ Húbris
+    expect(g.players[0]).toMatchObject({ gloria: 3, hubris: 4 });
+    g = play(27, (s) => (s.players[0].pos = templeOf(G.dionisio))); // Rei de Copas: +2 Húbris e remove 1
+    expect(g.players[0]).toMatchObject({ gloria: 4, hubris: 1, dracmas: 15 });
+  });
+
+  it('desloca pela rota normal, sem atalho e sem ativar a chegada', () => {
+    // Cavaleiro de Copas: o rival na casa 05 anda 3 pela saída normal (06, 07, 08), não pelo atalho da 06.
+    let g = play(25, (s) => {
+      s.players[0].pos = templeOf(G.poseidon);
+      Object.assign(s.players[1], { pos: 5, dracmas: 10, gloria: 0 });
+    });
+    expect(g.pending).toBeNull();
+    expect(g.players[1]).toMatchObject({ pos: 8, dracmas: 10, gloria: 0 });
+    // Cavaleiro de Ouros: +2 Glórias e 2 casas adiante, sem o +6 da casa de Dracmas onde chega.
+    g = play(53, (s) => (s.players[0].pos = templeOf(G.hermes)));
+    expect(g.players[0]).toMatchObject({ gloria: 2, pos: templeOf(G.hermes) + 2, dracmas: 30 - 8 });
+  });
+
+  it('4 de Espadas mostra a mão e faz o rival trocar uma carta; conta como sabotagem', () => {
+    const g = play(31);
+    expect(g.pending).toMatchObject({ kind: 'view', player: 0 });
+    const before = [...g.players[1].hand];
+    apply(g, { type: 'ANSWER', value: null });
+    expect(g.players[1].hand).toHaveLength(6);
+    expect(g.players[1].hand.filter((c) => before.includes(c))).toHaveLength(5);
+    expect(g.players[1].used.sabIn).toBe(1);
+  });
+
+  it('respeita escudo no ataque do 8 de Paus', () => {
+    const g = play(7, (s) => {
+      s.players[0].pos = templeOf(G.zeus);
+      Object.assign(s.players[1], { gloria: 3, shield: true });
+    });
+    expect(g.players[0]).toMatchObject({ gloria: 1, hubris: 1 });
+    expect(g.players[1]).toMatchObject({ gloria: 3, shield: false });
+  });
+
+  it('trocas e descartes funcionam com mão vazia e baralho esgotado', () => {
+    // 5 de Espadas contra rival sem cartas: nada acontece e o turno segue.
+    let g = play(32, (s) => (s.players[1].hand = []));
+    expect(g.current).toBe(1);
+    expect(g.players[0].hand).toHaveLength(5);
+    // 4 de Espadas contra rival sem cartas: não há o que ver nem descartar.
+    g = play(31, (s) => (s.players[1].hand = []));
+    expect(g.current).toBe(1);
+    // 7 de Espadas com baralho e descarte vazios: compra o que houver (nada) e descarta 3.
+    g = play(34, (s) => {
+      s.players[0].pos = templeOf(G.atena);
+      s.deck = [];
+      s.discard = [];
+    });
+    settle(g);
+    expect(g.players[0].hand.length).toBeLessThanOrEqual(RULES.hand);
+    expect(g.current).toBe(1);
+    // Baralho vazio com descarte: o descarte é reembaralhado para a compra.
+    g = play(29, (s) => {
+      s.discard.push(...s.deck);
+      s.deck = [];
+    });
+    settle(g);
+    expect(g.current).toBe(1);
+    expect(g.deck.length).toBeGreaterThan(0);
+  });
+
+  it('as cartas de Ouros não geram dinheiro sem limite: uma por turno e saem da mão', () => {
+    const g = game();
+    const p = g.players[0];
+    p.hand = [42, 43, 45, 47, 0, 1];
+    apply(g, { type: 'PLAY_CARD_EFFECT', card: 47 });
+    expect(g.current).toBe(1); // o efeito consome a ação principal do turno
+    expect(p.hand).not.toContain(47);
+    expect(() => apply(g, { type: 'PLAY_CARD_EFFECT', card: 45 })).toThrow();
+    // O maior ganho líquido de uma carta de Ouros universal não passa da renda de parar numa casa de Dracmas.
+    const net = [42, 43, 44, 45, 46, 47].map((id) => Number(/(\d+) Dracmas/.exec(CARDS[id].text)![1]) - CARDS[id].cost);
+    expect(Math.max(...net)).toBeLessThanOrEqual(RULES.dracmasStop);
   });
 });
 
