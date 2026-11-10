@@ -377,12 +377,15 @@ function chartResources(c: Collector): string {
   for (let v = 0; v <= maxY; v += 5) out += `<line x1="${left}" y1="${y(v)}" x2="${W - right}" y2="${y(v)}" stroke="${GRID}"/>` + text(left - 6, y(v) + 4, v, 'end');
   for (let i = 5; i <= maxX; i += 5) out += text(x(i), H - bottom + 16, i, 'middle');
   out += text((left + W - right) / 2, H - 6, 'rodada', 'middle');
+  const last = rows[rows.length - 1];
+  // Rótulos diretos no fim de cada linha, afastados entre si para não colidirem.
+  const labelY = series.map(([, f], k) => ({ k, y: y(f(last.r.sum) / last.r.n) })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < labelY.length; i++) labelY[i].y = Math.max(labelY[i].y, labelY[i - 1].y + 15);
   series.forEach(([name, f], k) => {
     const pts = rows.map(({ i, r }) => `${x(i).toFixed(1)},${y(f(r.sum) / r.n).toFixed(1)}`);
-    const last = rows[rows.length - 1];
     out += `<polyline points="${pts.join(' ')}" fill="none" stroke="${SERIES[k]}" stroke-width="2" stroke-linejoin="round"/>`;
     out += `<circle cx="${x(last.i)}" cy="${y(f(last.r.sum) / last.r.n)}" r="4" fill="${SERIES[k]}" stroke="#fcfcfb" stroke-width="2"/>`;
-    out += text(x(last.i) + 10, y(f(last.r.sum) / last.r.n) + 4, `${name} ${fmt(f(last.r.sum) / last.r.n)}`, 'start', 12, INK);
+    out += text(x(last.i) + 10, labelY.find((l) => l.k === k)!.y + 4, `${name} ${fmt(f(last.r.sum) / last.r.n)}`, 'start', 12, INK);
   });
   return out + '</svg>';
 }
@@ -409,7 +412,9 @@ function chartStops(c: Collector): string {
   const y = (v: number): number => top + (1 - v / max) * (H - top - bottom);
   let out = svgOpen(W, H, `Paradas por casa (${c.label}); templos em laranja`);
   const avg = mean(c.stops);
-  out += `<line x1="${left}" y1="${y(avg)}" x2="${W - right}" y2="${y(avg)}" stroke="${INK}" stroke-dasharray="3 3"/>` + text(W - right, y(avg) - 4, `média ${fmt(avg / c.games, 2)} por partida`, 'end');
+  for (let v = 0; v <= max / c.games; v += 1) out += `<line x1="${left}" y1="${y(v * c.games)}" x2="${W - right}" y2="${y(v * c.games)}" stroke="${GRID}"/>` + text(left - 6, y(v * c.games) + 4, v, 'end');
+  out += text(left, top - 6, `paradas por partida (linha tracejada: média de ${fmt(avg / c.games, 2)})`);
+  out += `<line x1="${left}" y1="${y(avg)}" x2="${W - right}" y2="${y(avg)}" stroke="${INK}" stroke-dasharray="3 3"/>`;
   c.stops.forEach((n, id) => {
     const node = NODES[id];
     out += `<rect x="${(left + id * bw + 1).toFixed(1)}" y="${y(n).toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${(H - bottom - y(n)).toFixed(1)}" rx="1.5" fill="${node.type === 'templo' ? SERIES[1] : SERIES[0]}"><title>Casa ${pad(id)} (${HOUSES[node.type].name}): ${fmt(n / c.games, 2)} paradas por partida</title></rect>`;

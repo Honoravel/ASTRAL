@@ -252,3 +252,12 @@ Todas as correspondências (valores, cartas, casas, efeitos, deuses e signos) es
 ```bash
 npm run reference
 ```
+
+## Auditoria de balanceamento
+
+Medições de duração, cartas, templos, economia, movimento, IA e signos estão em
+[`docs/AUDITORIA_BALANCEAMENTO.md`](docs/AUDITORIA_BALANCEAMENTO.md). Para refazer (cerca de 7 minutos em 4 núcleos, rodando as partes em paralelo):
+
+```bash
+npm run audit
+```
