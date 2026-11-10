@@ -18,12 +18,17 @@ export const RULES = {
   tollStop: 2,
   tollHubris: 1,
   favorStop: 2,
-  gloriaStop: 1,
+  gloriaPass: 1,
+  gloriaStop: 2,
   treasureMin: 2,
   treasureMax: 5,
   nemesisPassHubris: 4,
   nemesisPassToll: 1,
   altarMaxBet: 3,
+  /** Ira de Nêmesis: ao encerrar o turno com esta Húbris, o jogador é condenado… */
+  wrathHubris: 6,
+  /** …e a queda expia parte da soberba: a Húbris cai para este valor. */
+  wrathReset: 4,
 };
 
 export type RollRow = { text: string; changes: [Res, number][] };
@@ -48,5 +53,8 @@ export const TABLES: Record<'provacao' | 'evento', RollRow[]> = {
   ],
 };
 
-/** Altar: resultado do dado → Favores recebidos. */
-export const ALTAR_FAVOR = [0, 0, 1, 1, 2, 2];
+/** Altar: cada Dracma apostado além do primeiro soma 1 ao dado. Total 1–2: nada · 3–4: 1 Favor · 5+: 2 Favores. */
+export const altarFavor = (roll: number, bet: number): number => {
+  const total = roll + bet - 1;
+  return total <= 2 ? 0 : total <= 4 ? 1 : 2;
+};

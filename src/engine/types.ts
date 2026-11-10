@@ -182,7 +182,6 @@ export type FreePower = 'vision' | 'weave' | 'lira' | 'taca' | 'raio';
 export type Command =
   | { type: 'PLAY_CARD_MOVE'; card: number; dest: number; mod?: -1 | 0 | 1 }
   | { type: 'PLAY_CARD_EFFECT'; card: number }
-  | { type: 'TEMPLE_ACTION' }
   | { type: 'BUY_RELIC' }
   | { type: 'FREE_POWER'; power: FreePower }
   | { type: 'END_TURN' }

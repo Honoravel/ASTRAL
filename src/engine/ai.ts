@@ -1,14 +1,14 @@
 import { DIST, NODES, templeOf } from './board';
 import { CARDS } from './cards';
 import { GODS } from './data';
-import { apply, canBuyRelic, canEffect, canTempleAction, costFor, currentPlayer, freePowers, moveOptions, others, placeAllows } from './game';
+import { apply, canBuyRelic, canEffect, costFor, currentPlayer, freePowers, moveOptions, others, placeAllows } from './game';
 import { rand, shuffle } from './rng';
 import type { Answer, Command, GameState, Op, Player, Res } from './types';
 
 const WEIGHT: Record<Res, number> = { gloria: 10, dracmas: 1, favor: 1.5, hubris: -1.5 };
 
 function hubrisRisk(h: number): number {
-  return h * 1.5 + (h >= 2 ? 1.5 : 0) + (h >= 4 ? 7 : 0) + (h >= 6 ? 8 : 0);
+  return h * 1.5 + (h >= 2 ? 1.5 : 0) + (h >= 4 ? 4 : 0) + (h >= 6 ? 12 : 0);
 }
 
 /** Avaliação da situação de um jogador. */
@@ -35,7 +35,7 @@ function opsValue(state: GameState, me: number, ops: Op[]): number {
       case 'jail': v -= op.p === me ? 9 : -4; break;
       case 'endTurn': v -= 5; break;
       case 'buy': v += 3; break;
-      case 'altar': v += 1.5 - op.bet; break;
+      case 'altar': v += [1.5, 2.25, 2.5][op.bet - 1] - op.bet; break;
       case 'shield': v += 2; break;
       case 'peek': v += 0.3; break;
       case 'advance': case 'teleport': v += 1; break;
@@ -152,7 +152,6 @@ export function aiStep(state: GameState): void {
     }
     if (canEffect(state, card)) options.push({ cmd: { type: 'PLAY_CARD_EFFECT', card }, bias: placeAllows(p, CARDS[card]) && CARDS[card].use !== 'U' ? 1 : 0 });
   }
-  if (canTempleAction(state)) options.push({ cmd: { type: 'TEMPLE_ACTION' }, bias: 0 });
   if (canBuyRelic(state)) options.push({ cmd: { type: 'BUY_RELIC' }, bias: 0 });
 
   let best = options[0].cmd;

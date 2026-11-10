@@ -45,7 +45,7 @@ export const HOUSES: Record<HouseType, House> = {
     onPass: [{ k: 'toll', n: RULES.tollPass }], onStop: [{ k: 'toll', n: RULES.tollStop }],
   },
   favor: { name: 'Favor', pass: '', stop: `+${RULES.favorStop} Favores`, onPass: [], onStop: [{ k: 'res', res: 'favor', n: RULES.favorStop }] },
-  gloria: { name: 'Glória', pass: '', stop: `+${RULES.gloriaStop} Glória`, onPass: [], onStop: [{ k: 'res', res: 'gloria', n: RULES.gloriaStop }] },
+  gloria: { name: 'Glória', pass: RULES.gloriaPass ? `+${RULES.gloriaPass} Glória` : '', stop: `+${RULES.gloriaStop} Glória${RULES.gloriaStop > 1 ? 's' : ''}`, onPass: RULES.gloriaPass ? [{ k: 'res', res: 'gloria', n: RULES.gloriaPass }] : [], onStop: [{ k: 'res', res: 'gloria', n: RULES.gloriaStop }] },
   provacao: {
     name: 'Provação', pass: '', stop: '1d6: 1 +2 Húbris · 2 −2 Dracmas · 3 −1 Favor · 4 +2 Dracmas · 5 +1 Glória · 6 +1 Favor e +1 Dracma',
     onPass: [], onStop: [{ k: 'roll', table: 'provacao' }],
@@ -57,13 +57,13 @@ export const HOUSES: Record<HouseType, House> = {
     onPass: [{ k: 'hubrisToll', min: RULES.nemesisPassHubris, n: RULES.nemesisPassToll }], onStop: [{ k: 'judgement' }],
   },
   bifurcacao: { name: 'Bifurcação', pass: 'Escolha de rota: saída normal ou atalho', stop: 'Nenhum efeito.', onPass: [], onStop: [] },
-  templo: { name: 'Templo', pass: '', stop: 'Ação divina, comprar a relíquia ou nada', onPass: [], onStop: [{ k: 'temple' }] },
+  templo: { name: 'Templo', pass: '', stop: 'Ação divina (só ao chegar por movimento), comprar a relíquia ou nada', onPass: [], onStop: [{ k: 'temple' }] },
   evento: {
     name: 'Evento', pass: '', stop: '1d6: 1 −2 Dracmas · 2 +2 Dracmas · 3 +1 Favor · 4 +1 Húbris · 5 −1 Húbris · 6 +1 Glória',
     onPass: [], onStop: [{ k: 'roll', table: 'evento' }],
   },
   altar: {
-    name: 'Altar', pass: '', stop: `Aposte de 1 a ${RULES.altarMaxBet} Dracmas e role 1d6: 1–2 nada · 3–4 +1 Favor · 5–6 +2 Favores`,
+    name: 'Altar', pass: '', stop: `Aposte de 1 a ${RULES.altarMaxBet} Dracmas e role 1d6, +1 por Dracma além do primeiro: 1–2 nada · 3–4 +1 Favor · 5 ou mais +2 Favores`,
     onPass: [], onStop: [{ k: 'altar' }],
   },
   tesouro: {

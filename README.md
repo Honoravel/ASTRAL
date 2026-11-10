@@ -33,7 +33,7 @@ Outros comandos:
 - `src/ui/`: interface web (SVG + DOM).
 
 Humanos e IA usam a mesma API: `apply(state, command)`. Os comandos são
-`PLAY_CARD_MOVE`, `PLAY_CARD_EFFECT`, `TEMPLE_ACTION`, `BUY_RELIC`, `FREE_POWER`, `END_TURN` e `ANSWER`.
+`PLAY_CARD_MOVE`, `PLAY_CARD_EFFECT`, `BUY_RELIC`, `FREE_POWER`, `END_TURN` e `ANSWER`.
 `ANSWER` responde à decisão pendente em `state.pending` (rota de teletransporte, alvo, descarte,
 saída do Tártaro, substituição de relíquia, lance de duelo). A rota do movimento é escolhida pelo
 destino: como cada bifurcação leva a casas distintas, o destino define o caminho.
@@ -52,8 +52,8 @@ ativada e teletransportes não ativam nada. O resultado fica em `state.lastMove`
 | Pedágio divino | 8 | −1 Dracma | −2 Dracmas |
 | Tesouro | 4 | — | +2 a 5 Dracmas |
 | Favor | 8 | — | +2 Favores |
-| Altar | 6 | — | Aposta 1–3 Dracmas, 1d6: 1–2 nada · 3–4 +1 Favor · 5–6 +2 Favores |
-| Glória | 6 | — | +1 Glória |
+| Altar | 6 | — | Aposta 1–3 Dracmas, 1d6 +1 por Dracma além do primeiro: 1–2 nada · 3–4 +1 Favor · 5+ +2 Favores |
+| Glória | 6 | +1 Glória | +2 Glórias |
 | Provação | 6 | — | 1d6 de risco |
 | Evento | 6 | — | 1d6 de evento menor |
 | Destino | 6 | — | Revela Arcano Maior |
@@ -78,7 +78,13 @@ Presumidas na implementação, a confirmar:
   Virgem–Deméter, Libra–Atena, Escorpião–Dionísio, Sagitário–Hefesto, Capricórnio–Ártemis,
   Aquário–Apolo, Peixes–Poseidon. O patrono só define a casa inicial.
 - Modelo econômico: **equilibrado** (a opção recomendada na v1.6), ainda não confirmado.
-- Altar: o jogador pode desistir de apostar. Como está escrito, o valor apostado não muda o resultado.
+- Altar: o jogador pode desistir de apostar. Cada Dracma além do primeiro soma 1 ao dado
+  (a regra original não diferenciava as apostas).
+- Ação de templo: só ao **chegar** ao templo por movimento. Não existe mais como ação principal de
+  quem já está parado no templo, o que impedia "acampar" (por exemplo, 2 Glórias por rodada em Dionísio).
+  Comprar a relíquia continua possível como ação principal.
+- Ira de Nêmesis: quem encerra o turno com 6 ou mais de Húbris é condenado ao Tártaro e a Húbris cai para 4.
+- Casas de Glória: +1 na passagem e +2 na parada (eram 0 e +1), para acelerar a partida.
 - Fiscalização de Nêmesis sem saldo dá 1 Húbris, como o pedágio.
 - Arco de Ártemis ignora só efeitos negativos de **parada** (pedágio, Provação, Evento, julgamento).
 - Tridente de Poseidon rende a cada região nova atravessada no caminho (máximo 2 por rodada).
@@ -87,7 +93,6 @@ Presumidas na implementação, a confirmar:
   O mesmo vale para a vitória quando dois passam da meta juntos.
 - Baralho vazio: o descarte é reembaralhado. Mão vazia: o jogador pode encerrar o turno sem agir
   (isso é permitido a qualquer momento).
-- Ação de templo: uma vez por jogador por rodada (a recomendação da seção 8).
 - Oráculo: ganha +1 Glória a cada eleição vencida, inclusive reeleição. A Proteção do Destino é
   oferecida quando um Arcano Maior prejudicaria o Oráculo.
 - Descontos: o do signo soma com um único desconto de carta/relíquia (Pajem de Espadas ou Martelo).
@@ -96,12 +101,18 @@ Presumidas na implementação, a confirmar:
 - Foice rende no início de cada rodada a partir da segunda; Cinto rende ao fim das rodadas 3, 6, 9…
 - "Teletransportar até N casas adiante" permite ficar onde está.
 
-## Telemetria (IA × IA, meta de 20 Glórias, regras v1.6)
+## Telemetria (IA × IA, 150 partidas, meta de 20 Glórias)
 
 | Jogadores | Rodadas (média) | p10–p90 | Duelos/partida | Prisões/jogador | Relíquias/jogador |
 |---|---|---|---|---|---|
-| 2 | 29,9 | 20–42 | 0,2 | 0,02 | 1,1 |
-| 4 | 25,0 | 20–31 | 0,8 | 0,04 | 0,9 |
+| 2 | 25,1 | 20–30 | 0,4 | 0,03 | 1,4 |
+| 4 | 23,7 | 20–28 | 1,7 | 0,02 | 1,2 |
 
-Comparado à meta da seção 15 da v1.5: as partidas seguem mais longas que 12–20 rodadas, com poucos
-duelos e quase nenhuma prisão.
+A meta da seção 15 da v1.5 (12–20 rodadas) ainda não é atingida com 20 Glórias. Com meta de 16
+Glórias, a simulação dá média de 18,3 rodadas (p10–p90: 15–22). Teste com:
+
+```bash
+npm run sim -- 150 4 goal=16
+```
+
+Qualquer valor de `config.ts` pode ser sobrescrito assim (`chave=valor`).

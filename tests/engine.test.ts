@@ -4,6 +4,7 @@ import { buildBoard, DIST, NODES, reach, SHORTCUTS, TARTARUS, templeOf } from '.
 import { CARDS } from '../src/engine/cards';
 import { G, GODS, SIGNS } from '../src/engine/data';
 import { DESTINIES } from '../src/engine/destiny';
+import { altarFavor } from '../src/engine/config';
 import { apply, costFor, deserialize, newGame, RULES, serialize, walk } from '../src/engine/game';
 import type { GameState, HouseType } from '../src/engine/types';
 
@@ -181,7 +182,7 @@ describe('turno e casas', () => {
     };
     expect(pass(3, 5)).toMatchObject({ dracmas: 5, jailed: false });
     expect(pass(4, 5)).toMatchObject({ dracmas: 4, hubris: 4, jailed: false });
-    expect(pass(6, 0)).toMatchObject({ dracmas: 0, hubris: 7, jailed: false, pos: 15 });
+    expect(pass(4, 0)).toMatchObject({ dracmas: 0, hubris: 5, jailed: false, pos: 15 });
   });
 
   it('aplica a passagem de novo se a rota visitar a mesma casa duas vezes', () => {
@@ -216,10 +217,13 @@ describe('turno e casas', () => {
 
     g = game();
     stepTo(g, 88); // 89: Altar
-    expect(g.pending?.options?.map((o) => o.label)).toEqual(['Apostar 1 Dracma', 'Apostar 2 Dracmas', 'Apostar 3 Dracmas', 'Não apostar']);
+    expect(g.pending?.options?.map((o) => o.label)).toEqual(['Apostar 1 Dracma', 'Apostar 2 Dracmas (+1 no dado)', 'Apostar 3 Dracmas (+2 no dado)', 'Não apostar']);
     apply(g, { type: 'ANSWER', value: 2 });
     expect(g.players[0].dracmas).toBe(RULES.startDracmas - 3);
-    expect([0, 1, 2]).toContain(g.players[0].favor - RULES.startFavor);
+    expect([1, 2]).toContain(g.players[0].favor - RULES.startFavor); // apostando 3, o total nunca fica abaixo de 3
+    expect([1, 2, 3, 4, 5, 6].map((roll) => altarFavor(roll, 1))).toEqual([0, 0, 1, 1, 2, 2]);
+    expect([1, 2, 3, 4, 5, 6].map((roll) => altarFavor(roll, 2))).toEqual([0, 1, 1, 2, 2, 2]);
+    expect([1, 2, 3, 4, 5, 6].map((roll) => altarFavor(roll, 3))).toEqual([1, 1, 2, 2, 2, 2]);
 
     for (const from of [76, 7]) { // 77: Provação; 08: Evento
       g = game(2, from);
@@ -227,6 +231,29 @@ describe('turno e casas', () => {
       expect(g.current).toBe(1);
       expect(g.pending).toBeNull();
     }
+  });
+
+  it('a ira de Nêmesis condena quem encerra o turno com Húbris alta', () => {
+    const g = game();
+    const p = g.players[0];
+    p.hubris = RULES.wrathHubris - 1;
+    p.hand = [1, ...p.hand.filter((c) => c !== 1).slice(0, 5)]; // 2 de Paus: +2 Dracmas, +1 Húbris
+    apply(g, { type: 'PLAY_CARD_EFFECT', card: 1 });
+    expect(p).toMatchObject({ jailed: true, pos: TARTARUS, hubris: RULES.wrathReset });
+    expect(g.current).toBe(1);
+    expect(g.phase).toBe('CHOOSE_ACTION');
+  });
+
+  it('a ação de templo só vale ao chegar por movimento', () => {
+    const g = game();
+    const p = g.players[0];
+    Object.assign(p, { pos: templeOf(G.dionisio), dracmas: 10 });
+    expect(() => apply(g, { type: 'TEMPLE_ACTION' } as never)).toThrow();
+    expect(p.gloria).toBe(0);
+    stepTo(g, templeOf(G.dionisio) - 1);
+    expect(g.pending?.prompt).toBe('Templo de Dionísio');
+    apply(g, { type: 'ANSWER', value: 0 });
+    expect(p).toMatchObject({ gloria: 2, hubris: 1 });
   });
 
   it('condenação ao Tártaro encerra o turno sem quebrar o estado', () => {

@@ -1,10 +1,16 @@
 // Simula partidas só de IA para medir duração e equilíbrio (telemetria da seção 15).
-import { aiStep } from '../src/engine/ai';
-import { newGame, RULES } from '../src/engine/game';
+import { RULES } from '../src/engine/config';
 
 const games = Number(process.argv[2] ?? 200);
 const seats = Number(process.argv[3] ?? 4);
-if (process.argv[4]) RULES.goal = Number(process.argv[4]);
+// Parâmetros extras no formato chave=valor sobrescrevem RULES (ex.: gloriaStop=2).
+for (const arg of process.argv.slice(4)) {
+  const [key, value] = arg.split('=');
+  if (key in RULES) (RULES as Record<string, number>)[key] = Number(value);
+}
+// O mapa lê RULES ao ser carregado; por isso o motor é importado depois das sobrescritas.
+const { aiStep } = await import('../src/engine/ai');
+const { newGame } = await import('../src/engine/game');
 
 const rounds: number[] = [];
 const winsBySeat = new Array<number>(seats).fill(0);

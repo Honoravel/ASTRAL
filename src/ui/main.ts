@@ -3,7 +3,7 @@ import { HOUSES, NODES } from '../engine/board';
 import { cardName, CARDS, useLabel } from '../engine/cards';
 import { ELEMENT_NAME, glyph, GODS, SIGNS } from '../engine/data';
 import { DESTINIES } from '../engine/destiny';
-import { apply, canBuyRelic, canEffect, canTempleAction, canUseSandals, costFor, deserialize, freePowers, moveOptions, newGame, RULES, serialize, votes } from '../engine/game';
+import { apply, canBuyRelic, canEffect, canUseSandals, costFor, deserialize, freePowers, moveOptions, newGame, RULES, serialize, votes } from '../engine/game';
 import type { Answer, Command, FreePower, GameState, HouseType, Pending, Player, PlayerConfig } from '../engine/types';
 import { boardSvg, PLAYER_COLORS, showHighlights, updateTokens } from './board-view';
 import { iconSvg } from './icons';
@@ -105,12 +105,12 @@ function rulesHtml(): string {
     <h2>Como jogar</h2>
     <ol class="how">
       <li>Vence quem chegar primeiro a <b>${RULES.goal} de Glória</b>. No início do turno a mão volta a 6 cartas.</li>
-      <li>Cada turno tem <b>uma ação principal</b>: <b>mover</b> (descarta a carta e anda exatamente o movimento dela), <b>usar o efeito</b> de uma carta (paga o custo e não se move), fazer a <b>ação do templo</b> ou <b>comprar a relíquia</b> do templo onde está.</li>
+      <li>Cada turno tem <b>uma ação principal</b>: <b>mover</b> (descarta a carta e anda exatamente o movimento dela), <b>usar o efeito</b> de uma carta (paga o custo e não se move), ou <b>comprar a relíquia</b> do templo onde está.</li>
       <li>Efeitos <b>universais</b> valem em qualquer casa; <b>elementais</b>, só em templo do elemento da carta; <b>divinos</b>, só no templo do deus indicado.</li>
-      <li>O <b>caminho importa</b>: cada casa atravessada aplica seu efeito de <b>passagem</b> (ganhar ou pagar Dracmas, fiscalização de Nêmesis) e a última aplica só o efeito de <b>parada</b>. Ao parar em templo, escolha: ação do templo (1 vez por rodada), relíquia ou nada.</li>
+      <li>O <b>caminho importa</b>: cada casa atravessada aplica seu efeito de <b>passagem</b> (ganhar ou pagar Dracmas, fiscalização de Nêmesis) e a última aplica só o efeito de <b>parada</b>. Ao <b>chegar</b> a um templo por movimento, escolha: ação do templo, relíquia ou nada. Ficar parado no templo não repete a ação.</li>
       <li>Ao parar em casa ocupada, você pode desafiar para um <b>duelo</b>: cada um aposta de 0 a 3 Favores em segredo.</li>
       <li>A cada ${RULES.electionEvery} rodadas há <b>eleição do Oráculo</b>: vence quem tiver mais Favor (o Favor não é gasto) e ganha 1 Glória.</li>
-      <li><b>Húbris</b> é punida nas casas de Nêmesis e pode levar ao <b>Tártaro</b>, de onde se sai por Penitência, Suborno ou Pacto Sombrio.</li>
+      <li><b>Húbris</b> é punida nas casas de Nêmesis, e quem encerra o turno com <b>${RULES.wrathHubris} ou mais</b> é condenado ao <b>Tártaro</b>, de onde se sai por Penitência, Suborno ou Pacto Sombrio.</li>
     </ol>
     <h2>Casas</h2>
     <table class="temples">
@@ -268,7 +268,6 @@ function actionHtml(p: Player): string {
   const buttons: string[] = [];
   if (node.type === 'templo') {
     const god = GODS[node.region];
-    buttons.push(`<button data-cmd="TEMPLE_ACTION" ${canTempleAction(game) ? '' : 'disabled'} title="Uma vez por rodada">Templo: ${god.action.label}</button>`);
     if (game.stock[node.region]) buttons.push(`<button data-cmd="BUY_RELIC" ${canBuyRelic(game) ? '' : 'disabled'} title="${god.relic.text}">Comprar ${god.relic.name} (${god.relic.price})</button>`);
   }
   for (const power of freePowers(game)) buttons.push(`<button data-power="${power}" class="free">${POWER_LABEL[power]}</button>`);
@@ -356,7 +355,7 @@ function update(): void {
     ev.stopPropagation();
     send({ type: 'PLAY_CARD_EFFECT', card: Number(el.dataset.effect) });
   }));
-  side.querySelectorAll<HTMLButtonElement>('[data-cmd]').forEach((el) => el.addEventListener('click', () => send({ type: el.dataset.cmd as 'TEMPLE_ACTION' | 'BUY_RELIC' | 'END_TURN' })));
+  side.querySelectorAll<HTMLButtonElement>('[data-cmd]').forEach((el) => el.addEventListener('click', () => send({ type: el.dataset.cmd as 'BUY_RELIC' | 'END_TURN' })));
   side.querySelectorAll<HTMLButtonElement>('[data-power]').forEach((el) => el.addEventListener('click', () => send({ type: 'FREE_POWER', power: el.dataset.power as FreePower })));
   side.querySelectorAll<HTMLButtonElement>('[data-sandals]').forEach((el) => el.addEventListener('click', () => {
     sandals = Number(el.dataset.sandals) as -1 | 0 | 1;

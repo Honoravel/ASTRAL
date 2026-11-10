@@ -1,5 +1,5 @@
 import { COMMON, NODES, reach, TARTARUS, templeOf } from './board';
-import { ALTAR_FAVOR, RULES, TABLES } from './config';
+import { altarFavor, RULES, TABLES } from './config';
 import { cardName, CARDS, effectOps, T } from './cards';
 import { ELEMENT_SUIT, G, GODS, SIGNS, SUIT_ELEMENT } from './data';
 import { DESTINIES } from './destiny';
@@ -173,12 +173,6 @@ export const canUseSandals = (state: GameState): boolean => {
 function templeAffordable(p: Player, region: number): boolean {
   const { cost, res } = GODS[region].action;
   return !p.used.temple && p[res] >= cost;
-}
-
-export function canTempleAction(state: GameState): boolean {
-  const p = currentPlayer(state);
-  const node = NODES[p.pos];
-  return acting(state) && node.type === 'templo' && templeAffordable(p, node.region);
 }
 
 function relicAffordable(state: GameState, p: Player, region: number): boolean {
@@ -383,7 +377,7 @@ function land(state: GameState, p: Player): Op[] {
         const bets = Array.from({ length: RULES.altarMaxBet }, (_, i) => i + 1);
         ops.push({
           t: 'choice', p: id, prompt: 'Altar: apostar Dracmas por Favor?', options: [
-            ...bets.map((bet) => ({ label: `Apostar ${bet} Dracma${bet > 1 ? 's' : ''}`, ops: [{ t: 'altar', p: id, bet } as Op], disabled: p.dracmas < bet })),
+            ...bets.map((bet) => ({ label: `Apostar ${bet} Dracma${bet > 1 ? `s (+${bet - 1} no dado)` : ''}`, ops: [{ t: 'altar', p: id, bet } as Op], disabled: p.dracmas < bet })),
             { label: 'Não apostar', ops: [] },
           ],
         });
@@ -767,7 +761,7 @@ function exec(state: GameState, op: Op): Op[] | null {
       const p = P(op.p);
       const bet = -change(p, 'dracmas', -op.bet);
       const roll = d6(state);
-      const favor = ALTAR_FAVOR[roll - 1];
+      const favor = altarFavor(roll, bet);
       change(p, 'favor', favor);
       say(state, p.id, `Altar: ${p.name} aposta ${bet} Dracma${bet > 1 ? 's' : ''} e tira ${roll}: ${favor ? `+${favor} Favor${favor > 1 ? 'es' : ''}` : 'perde a aposta'}.`);
       return [];
@@ -777,6 +771,12 @@ function exec(state: GameState, op: Op): Op[] | null {
       return [];
     case 'endTurn': {
       if (victory(state)) return [];
+      const ending = P(state.current);
+      if (!ending.jailed && ending.hubris >= RULES.wrathHubris) {
+        say(state, ending.id, `A soberba de ${ending.name} (Húbris ${ending.hubris}) desperta a ira de Nêmesis.`);
+        jail(state, ending);
+        ending.hubris = RULES.wrathReset;
+      }
       if (state.sim) {
         state.queue = [];
         return [];
@@ -844,10 +844,6 @@ export function apply(state: GameState, cmd: Command): void {
       state.queue = [...effectOps(cmd.card, p.id), { t: 'endTurn' }];
       break;
     }
-    case 'TEMPLE_ACTION':
-      if (!canTempleAction(state)) throw new Error('Ação de templo indisponível.');
-      state.queue = [...templeActionOps(NODES[p.pos].region, p.id), { t: 'endTurn' }];
-      break;
     case 'BUY_RELIC':
       if (!canBuyRelic(state)) throw new Error('Não é possível comprar a relíquia.');
       state.queue = [{ t: 'buy', p: p.id, relic: NODES[p.pos].region }, { t: 'endTurn' }];
@@ -881,6 +877,8 @@ export function apply(state: GameState, cmd: Command): void {
     case 'END_TURN':
       state.queue = [{ t: 'endTurn' }];
       break;
+    default:
+      throw new Error('Comando desconhecido.');
   }
   run(state);
 }
