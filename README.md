@@ -5,7 +5,7 @@ com o *Sistema de casas v1.6* (efeitos de passagem e de parada) e os *templos v1
 (ação principal, ação secundária, investimentos e afinidades de cartas) e as *mecânicas
 estratégicas v1.9* (armadilhas, sabotagem, política, eventos globais e contratos):
 2 a 4 jogadores (humanos no mesmo dispositivo e/ou IA) disputam a ascensão divina.
-Vence quem primeiro chegar a **20 de Glória**.
+Vence quem primeiro chegar a **30 de Glória**.
 
 ## Como rodar
 
@@ -145,6 +145,43 @@ são opções da decisão de chegada ao templo (respondidas com `ANSWER`); `RESO
 - **Eventos globais**: o primeiro só aparece após a primeira eleição (rodada 6).
 - **Conselho de Atena**: vale por jogador, na primeira carta de Espadas da rodada.
 
+## Rebalanceamento econômico
+
+Dinheiro mais importante, Glória mais cara e mais risco nas ações poderosas.
+
+| Parâmetro | Antes | Agora |
+|---|---|---|
+| Glória para vencer | 20 | 30 |
+| Dracmas / Favor iniciais | 5 / 1 | 10 / 2 |
+| Teto de Favor | 10 | 12 |
+| Teto de Dracmas de passagem | 4 | 6 |
+| Suborno no Tártaro | 4 | 8 |
+| Multa de Nêmesis | 4 | 6 + Húbris |
+| Casas de Dracmas (passagem / parada) | +1 / +2 | +3 / +6 |
+| Pedágio (passagem / parada) | −1 / −2 | −2 / −4 |
+| Casas de Glória (passagem / parada) | +1 / +2 | 0 / +2 |
+| Relíquias | 5 a 8 | 10 a 18 |
+| Ascensão de Zeus | 6 Dracmas | 10 Dracmas |
+| Forja / Colheita | 5 → 8 / 4 → 8 | 10 → 16 / 8 → 16 |
+
+Movimento por carta: Ás 1 · 2 a 6 pelo valor · 7, 8 e 9 andam 3 · 10 anda 4 · Pajem 2 · Cavaleiro 5 ·
+Rainha 3 · Rei 4. São 20 cartas de 3 passos, 12 de 4, 8 de 2, 8 de 5, 4 de 1 e 4 de 6.
+
+Cartas de Glória pedidas: Ás de Paus 4 · 4 de Paus 8 · 7 de Paus 10 · 10 de Paus 14 (+3 Húbris) ·
+Rei de Paus 18 (+3 Húbris) · Rei de Copas 15 (+2 Húbris) · Rei de Espadas 11 · Rei de Ouros 12.
+
+Extrapolações (não estavam no pedido; feitas para manter a mesma escala):
+
+- **Demais cartas de Glória**, que ficariam muito mais baratas que as corrigidas: 8 e 9 de Paus 8,
+  Rainha de Paus 8, 9 de Copas 5, 10 de Copas 8, Rainha de Copas 9, 8 de Espadas 6, 10 de Espadas 8,
+  Rainha de Espadas 8, 9 de Ouros 8, Cavaleiro de Ouros 7, Rainha de Ouros 10.
+- **Custos de templo** subiram para a faixa de 3 a 5 Dracmas (8 a 10 nas ações fortes); ganhos de
+  templo, tesouros, duelos, armadilhas e eventos subiram na mesma proporção.
+- **Eleição**: após a votação, cada jogador perde metade do Favor, arredondada para baixo.
+- **Descontos**: Aprimoramento vale −3 e o Martelo −2, pois −1 deixou de pesar em cartas de 11 a 18.
+
+Todos os números estão em `src/engine/config.ts` e a tabela completa em `docs/REFERENCIA.md`.
+
 ## Regras presumidas (não especificadas na v1.5)
 
 Decididas com o autor:
@@ -193,14 +230,13 @@ Presumidas na implementação, a confirmar:
 - Foice rende no início de cada rodada a partir da segunda; Cinto rende ao fim das rodadas 3, 6, 9…
 - "Teletransportar até N casas adiante" permite ficar onde está.
 
-## Telemetria (IA × IA, 150 partidas, meta de 20 Glórias, regras v1.9)
+## Telemetria (IA × IA, 150 partidas, após o rebalanceamento)
 
-| Jogadores | Rodadas (média) | p10–p90 | Duelos/partida | Prisões/jogador | Relíquias/jogador |
-|---|---|---|---|---|---|
-| 2 | 22,7 | 17–28 | 0,3 | 0,09 | 0,3 |
-| 4 | 21,2 | 18–25 | 1,1 | 0,10 | 0,3 |
-
-Com 4 jogadores a IA arma cerca de 7 armadilhas por partida e perto de 5 disparam.
+| Jogadores | Meta | Rodadas (média) | p10–p90 | Duelos/partida | Prisões/jogador | Relíquias/jogador |
+|---|---|---|---|---|---|---|
+| 2 | 30 | 34,3 | 29–41 | 0,6 | 0,18 | 0,8 |
+| 4 | 30 | 33,3 | 28–39 | 3,3 | 0,15 | 0,6 |
+| 4 | 25 | 27,0 | 23–32 | — | — | — |
 
 ## Referência
 

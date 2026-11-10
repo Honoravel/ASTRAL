@@ -143,7 +143,7 @@ h('17. Sabotagens', 'Cartas existentes que contam como sabotagem:\n\n'
   + table(['Tipo', 'Custo', 'Efeito'], Object.values(SABOTAGES).map((s) => [s.name, `${s.dracmas} Dracmas${s.favor ? ` + ${s.favor} Favor` : ''}`, s.text])));
 
 h('18. Investimentos', table(['Investimento', 'Templo', 'Custo', 'Renda', 'Duração', 'Total'], [
-  ['Forja Produtiva', 'Hefesto', `${RULES.forgeCost} Dracmas`, '+1 Dracma por rodada', `${RULES.forgeTotal} rodadas`, `${RULES.forgeTotal} Dracmas`],
+  ['Forja Produtiva', 'Hefesto', `${RULES.forgeCost} Dracmas`, `+${RULES.forgeYield} Dracmas por rodada`, `${RULES.forgeRounds} rodadas`, `${RULES.forgeRounds * RULES.forgeYield} Dracmas`],
   ['Colheita Sagrada', 'Deméter', `${RULES.harvestCost} Dracmas`, `+${RULES.harvestYield} Dracmas por rodada`, `${RULES.harvestRounds} rodadas`, `${RULES.harvestRounds * RULES.harvestYield} Dracmas`],
 ]));
 

@@ -238,7 +238,7 @@ const POWER_LABEL: Record<FreePower, string> = {
   vision: 'Visão Profética (ver 3 do Destino)',
   weave: 'Tecelagem (reorganizar 3 do Destino, 2 Favores)',
   lira: 'Lira de Apolo (ver a próxima do Destino)',
-  taca: 'Taça de Dionísio (−1 Húbris, +2 Dracmas)',
+  taca: `Taça de Dionísio (−1 Húbris, +${RULES.cupGain} Dracmas)`,
   raio: 'Raio de Zeus (+3 Glórias, +2 Húbris)',
 };
 
@@ -311,7 +311,7 @@ function actionHtml(p: Player): string {
     if (game.stock[node.region]) buttons.push(`<button data-cmd="BUY_RELIC" ${canBuyRelic(game) ? '' : 'disabled'} title="${god.relic.text}">Comprar ${god.relic.name} (${god.relic.price})</button>`);
   }
   for (const power of freePowers(game)) buttons.push(`<button data-power="${power}" class="free">${POWER_LABEL[power]}</button>`);
-  if (p.contract) buttons.push('<button data-cmd="ABANDON_CONTRACT" class="ghost">Abandonar contrato (2 Dracmas)</button>');
+  if (p.contract) buttons.push(`<button data-cmd="ABANDON_CONTRACT" class="ghost">Abandonar contrato (${RULES.contractAbandon} Dracmas)</button>`);
   buttons.push('<button data-cmd="END_TURN" class="ghost">Encerrar turno sem agir</button>');
   const sandalsUi = canUseSandals(game)
     ? `<div class="sandals">Sandálias de Hermes: ${([-1, 0, 1] as const).map((m) => `<button data-sandals="${m}" class="${sandals === m ? 'on' : ''}">${m > 0 ? '+1' : m < 0 ? '−1' : '0'}</button>`).join('')}</div>`

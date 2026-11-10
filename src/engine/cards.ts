@@ -3,8 +3,20 @@ import type { Card, Op, Res, Suit } from './types';
 
 export const SUITS: Suit[] = ['Paus', 'Copas', 'Espadas', 'Ouros'];
 export const RANKS = ['Ás', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Pajem', 'Cavaleiro', 'Rainha', 'Rei'];
-const MOVES = [1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 2, 5, 3, 6];
+/** Movimento por carta (Ás…Rei): concentrado em 3 passos; 1 e 6 são raros. */
+const MOVES = [1, 2, 3, 4, 5, 6, 3, 3, 3, 4, 2, 5, 3, 4];
 const COSTS = [0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 2, 3, 4, 5];
+/**
+ * Custos rebalanceados das cartas que dão Glória (id da carta → Dracmas). Escala: 1 Glória ≈ 4,
+ * 2 ≈ 8, 3 ≈ 10–12, 4 ≈ 14–15, 5 ≈ 18; cartas presas a um templo custam um pouco menos.
+ */
+const GLORY_COST: Record<number, number> = {
+  0: 4, 3: 8, 6: 10, 7: 8, 8: 8, 9: 14, 12: 8, 13: 18,
+  22: 5, 23: 8, 26: 9, 27: 15,
+  35: 6, 37: 8, 40: 8, 41: 11,
+  50: 8, 53: 7, 54: 10, 55: 12,
+};
+
 /** Deuses das cartas divinas (Cavaleiro, Rainha, Rei) de cada naipe. */
 const DIVINE: number[][] = [
   [G.ares, G.hefesto, G.zeus],
@@ -17,13 +29,13 @@ const TEXTS: string[][] = [
   [
     'Ganhe 1 Glória.', 'Ganhe 2 Dracmas e 1 Húbris.', 'Transfira até 1 Dracma de um adversário para você.', 'Ganhe 2 Glórias e 1 Húbris.',
     'Um adversário perde até 1 Favor; você ganha 1 Húbris.', 'Ganhe 3 Dracmas e 1 Húbris.', 'Ganhe 3 Glórias e 2 Húbris.',
-    'Ganhe 2 Glórias; adversário perde até 1 Glória.', 'Ganhe 2 Glórias; com 3+ Húbris, ganhe mais 1.', 'Ganhe 4 Glórias e 2 Húbris.',
-    'Remova 1 Húbris ou ganhe 1 Dracma.', 'Roube até 3 Dracmas; ganhe 1 Húbris.', 'Ganhe 2 Glórias e um escudo para a próxima perda de Glória.', 'Ganhe 5 Glórias e 2 Húbris.',
+    'Ganhe 2 Glórias; adversário perde até 1 Glória.', 'Ganhe 2 Glórias; com 3+ Húbris, ganhe mais 1.', 'Ganhe 4 Glórias e 3 Húbris.',
+    'Remova 1 Húbris ou ganhe 1 Dracma.', 'Roube até 3 Dracmas; ganhe 1 Húbris.', 'Ganhe 2 Glórias e um escudo para a próxima perda de Glória.', 'Ganhe 5 Glórias e 3 Húbris.',
   ],
   [
     'Ganhe 1 Favor.', 'Remova 1 Húbris.', 'Ganhe 2 Dracmas.', 'Ganhe 2 Favores.', 'Remova até 2 Húbris.', 'Ganhe 1 Favor e 1 Dracma.', 'Ganhe 3 Favores.',
     'Remova até 3 Húbris e ganhe 1 Favor.', 'Ganhe 2 Favores e 1 Glória.', 'Ganhe 2 Glórias e remova até 2 Húbris.', 'Compre 1 carta e descarte 1.',
-    'Mova um adversário até 3 casas adiante, sem ativar o destino.', 'Ganhe 2 Favores e 2 Glórias.', 'Ganhe 4 Glórias e 2 Húbris; remova 1 Húbris.',
+    'Mova um adversário até 3 casas adiante, sem ativar o destino.', 'Ganhe 2 Favores e 2 Glórias.', 'Ganhe 4 Glórias e 2 Húbris.',
   ],
   [
     'Olhe 2 cartas do baralho de jogadores e reorganize.', 'Compre 1 carta e descarte 1.', 'Ganhe 1 Favor.', 'Veja a mão de um adversário.',
@@ -44,7 +56,7 @@ export const CARDS: Card[] = SUITS.flatMap((suit, s) =>
     suit,
     rank,
     move: MOVES[r],
-    cost: COSTS[r],
+    cost: GLORY_COST[s * 14 + r] ?? COSTS[r],
     use: r < 6 ? ('U' as const) : r < 11 ? ('E' as const) : ('D' as const),
     god: r >= 11 ? DIVINE[s][r - 11] : null,
     text: TEXTS[s][r],
@@ -80,11 +92,11 @@ export function effectOps(cardId: number, p: number): Op[] {
     case 6: return [g('gloria', 3), g('hubris', 2)];
     case 7: return [g('gloria', 2), foe('Quem perde 1 Glória?', [{ t: 'res', p: T, res: 'gloria', n: -1 }])];
     case 8: return [{ t: 'paus9', p }];
-    case 9: return [g('gloria', 4), g('hubris', 2)];
+    case 9: return [g('gloria', 4), g('hubris', 3)];
     case 10: return [{ t: 'choice', p, prompt: 'Pajem de Paus', options: [{ label: 'Remover 1 Húbris', ops: [g('hubris', -1)] }, { label: 'Ganhar 1 Dracma', ops: [g('dracmas', 1)] }] }];
     case 11: return [foe('De quem roubar até 3 Dracmas?', [{ t: 'transfer', from: T, to: p, res: 'dracmas', n: 3 }]), g('hubris', 1)];
     case 12: return [g('gloria', 2), { t: 'shield', p }];
-    case 13: return [g('gloria', 5), g('hubris', 2)];
+    case 13: return [g('gloria', 5), g('hubris', 3)];
     // Copas
     case 14: return [g('favor', 1)];
     case 15: return [g('hubris', -1)];
@@ -99,7 +111,7 @@ export function effectOps(cardId: number, p: number): Op[] {
     case 24: return cycle(1, 1);
     case 25: return [foe('Qual adversário mover?', [{ t: 'advance', p, who: T, min: 1, max: 3 }])];
     case 26: return [g('favor', 2), g('gloria', 2)];
-    case 27: return [g('gloria', 4), g('hubris', 2), g('hubris', -1)];
+    case 27: return [g('gloria', 4), g('hubris', 2)];
     // Espadas
     case 28: return [{ t: 'peek', p, deck: 'minor', n: 2, reorder: true }];
     case 29: return cycle(1, 1);

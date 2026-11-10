@@ -178,7 +178,8 @@ function martelo(p: Player, card: Card): boolean {
 export function costFor(p: Player, card: Card, state?: GameState): number {
   let cost = card.cost;
   if (ELEMENT_SUIT[SIGNS[p.sign].element] === card.suit) cost--;
-  if (p.discountNext || martelo(p, card) || (p.divineDiscount && card.use === 'D')) cost--;
+  // Descontos de carta e relíquia não acumulam entre si: vale o maior.
+  cost -= Math.max(p.discountNext ? 1 : 0, martelo(p, card) ? RULES.hammerDiscount : 0, p.divineDiscount && card.use === 'D' ? RULES.refineDiscount : 0);
   cost = Math.max(0, cost);
   // Conselho de Atena: nunca torna gratuita uma carta que custa ao menos 1.
   if (state && event(state, EV.atena) && card.suit === 'Espadas' && !p.used.atena && cost >= 2) cost--;
@@ -291,75 +292,75 @@ export function templeOptions(state: GameState, p: Player, region: number): Choi
     case G.zeus: {
       const wait = zeusReady(state, p) ? '' : ` (disponível na rodada ${p.gloryRound! + RULES.gloryActionCooldown})`;
       return [
-        opt(`Ascensão: 6 Dracmas → +2 Glórias, +1 Húbris${wait}`, D >= 6 && zeusReady(state, p), [g('dracmas', -6), g('gloria', 2), g('hubris', 1), { t: 'zeusMark', p: id }]),
+        opt(`Ascensão: ${RULES.zeusCost} Dracmas → +2 Glórias, +1 Húbris${wait}`, D >= RULES.zeusCost && zeusReady(state, p), [g('dracmas', -RULES.zeusCost), g('gloria', 2), g('hubris', 1), { t: 'zeusMark', p: id }]),
         opt('Decreto Olímpico: 3 Favores → +1 Glória', F >= 3, [g('favor', -3), g('gloria', 1)]),
         opt('Decreto de Proteção: 2 Favores → anula a próxima sabotagem política contra você, até a eleição', F >= 2 && !p.decree, [g('favor', -2), { t: 'decree', p: id }]),
       ];
     }
     case G.hera:
       return [
-        opt('Influência: 2 Favores → 4 Dracmas', F >= 2, [g('favor', -2), g('dracmas', 4), { t: 'track', p: id, kind: 'trade' }]),
-        opt('Influência: 5 Dracmas → 2 Favores', D >= 5, [g('dracmas', -5), g('favor', 2), { t: 'track', p: id, kind: 'trade' }]),
-        opt('Campanha: 3 Dracmas → +1 Favor', D >= 3, [g('dracmas', -3), g('favor', 1)]),
+        opt(`Influência: 2 Favores → ${RULES.heraSell} Dracmas`, F >= 2, [g('favor', -2), g('dracmas', RULES.heraSell), { t: 'track', p: id, kind: 'trade' }]),
+        opt(`Influência: ${RULES.heraBuy} Dracmas → 2 Favores`, D >= RULES.heraBuy, [g('dracmas', -RULES.heraBuy), g('favor', 2), { t: 'track', p: id, kind: 'trade' }]),
+        opt(`Campanha: ${RULES.campaign} Dracmas → +1 Favor`, D >= RULES.campaign, [g('dracmas', -RULES.campaign), g('favor', 1)]),
         opt('Proteção Real: 2 Favores → escudo contra perda de Glória', F >= 2, [g('favor', -2), { t: 'shield', p: id }]),
       ];
     case G.apolo:
       return [
-        opt('Visão Profética: 2 Dracmas → reorganizar 3 cartas do Destino', D >= 2, [g('dracmas', -2), reorder]),
-        opt('Purificação: 3 Dracmas → −2 Húbris', D >= 3, [g('dracmas', -3), g('hubris', -2)]),
+        opt(`Visão Profética: ${RULES.vision} Dracmas → reorganizar 3 cartas do Destino`, D >= RULES.vision, [g('dracmas', -RULES.vision), reorder]),
+        opt(`Purificação: ${RULES.purify} Dracmas → −2 Húbris`, D >= RULES.purify, [g('dracmas', -RULES.purify), g('hubris', -2)]),
       ];
     case G.artemis:
       return [
-        opt('Caçada: 1d6, +1 a 5 Dracmas (resultado 1: +1 Húbris)', true, [{ t: 'templeRoll', p: id, kind: 'artemis' }]),
-        opt('Caça Sagrada: 2 Dracmas → comprar 2 cartas e descartar 2', D >= 2, [g('dracmas', -2), { t: 'draw', p: id, n: 2 }, { t: 'discard', p: id, n: 2 }]),
+        opt(`Caçada: 1d6, +${1 + RULES.huntBonus} a ${6 + RULES.huntBonus} Dracmas (resultado 1: +1 Húbris)`, true, [{ t: 'templeRoll', p: id, kind: 'artemis' }]),
+        opt(`Caça Sagrada: ${RULES.sacredHunt} Dracmas → comprar 2 cartas e descartar 2`, D >= RULES.sacredHunt, [g('dracmas', -RULES.sacredHunt), { t: 'draw', p: id, n: 2 }, { t: 'discard', p: id, n: 2 }]),
       ];
     case G.atena:
       return [
-        opt('Julgamento: 3 Dracmas → disputar 2 Favores de um adversário (falha: +1 Húbris)', D >= 3, [g('dracmas', -3), { t: 'target', p: id, prompt: 'Disputar Favores de quem?', ops: [{ t: 'dispute', p: id, of: T }] }]),
+        opt(`Julgamento: ${RULES.judge} Dracmas → disputar 2 Favores de um adversário (falha: +1 Húbris)`, D >= RULES.judge, [g('dracmas', -RULES.judge), { t: 'target', p: id, prompt: 'Disputar Favores de quem?', ops: [{ t: 'dispute', p: id, of: T }] }]),
         opt('Estratégia: 2 Favores → reorganizar 3 cartas do Destino', F >= 2, [g('favor', -2), reorder]),
-        opt('Intriga: 3 Dracmas → um adversário perde 1 Favor', D >= 3 && !p.sabDone && sabotageTargets(state, id).length > 0,
-          [g('dracmas', -3), { t: 'target', p: id, prompt: 'Intrigar contra quem?', sab: 'politica', ops: [{ t: 'res', p: T, res: 'favor', n: -1 }] }]),
+        opt(`Intriga: ${RULES.intrigue} Dracmas → um adversário perde 1 Favor`, D >= RULES.intrigue && !p.sabDone && sabotageTargets(state, id).length > 0,
+          [g('dracmas', -RULES.intrigue), { t: 'target', p: id, prompt: 'Intrigar contra quem?', sab: 'politica', ops: [{ t: 'res', p: T, res: 'favor', n: -1 }] }]),
       ];
     case G.ares:
       return [
-        opt('Confronto: 2 Dracmas e 1 Favor → duelo à distância por 1 Glória', D >= 2 && F >= 1 && !p.duelDone && foes.some((f) => !f.jailed),
-          [g('dracmas', -2), g('favor', -1), { t: 'target', p: id, prompt: 'Desafiar quem?', filter: 'free', ops: [{ t: 'duel', a: id, d: T, stake: 'gloria' }] }]),
-        opt(`Preparação de Guerra: 2 Dracmas → +${RULES.duelPrep} de força no próximo duelo`, D >= 2, [g('dracmas', -2), { t: 'duelBonus', p: id }]),
+        opt(`Confronto: ${RULES.confront} Dracmas e 1 Favor → duelo à distância por 1 Glória`, D >= RULES.confront && F >= 1 && !p.duelDone && foes.some((f) => !f.jailed),
+          [g('dracmas', -RULES.confront), g('favor', -1), { t: 'target', p: id, prompt: 'Desafiar quem?', filter: 'free', ops: [{ t: 'duel', a: id, d: T, stake: 'gloria' }] }]),
+        opt(`Preparação de Guerra: ${RULES.warPrep} Dracmas → +${RULES.duelPrep} de força no próximo duelo`, D >= RULES.warPrep, [g('dracmas', -RULES.warPrep), { t: 'duelBonus', p: id }]),
       ];
     case G.hefesto:
       return [
-        opt(`Forja: ${RULES.forgeCost} Dracmas → +1 Dracma por rodada até render ${RULES.forgeTotal}`, D >= RULES.forgeCost && !p.investments.some((i) => i.kind === 'forge'), [g('dracmas', -RULES.forgeCost), { t: 'invest', p: id, kind: 'forge' }]),
-        opt('Aprimoramento: 3 Dracmas → próxima carta divina custa −1', D >= 3 && !p.divineDiscount, [g('dracmas', -3), { t: 'divineDiscount', p: id }]),
+        opt(`Forja: ${RULES.forgeCost} Dracmas → +${RULES.forgeYield} Dracmas por rodada durante ${RULES.forgeRounds} rodadas`, D >= RULES.forgeCost && !p.investments.some((i) => i.kind === 'forge'), [g('dracmas', -RULES.forgeCost), { t: 'invest', p: id, kind: 'forge' }]),
+        opt(`Aprimoramento: ${RULES.refine} Dracmas → próxima carta divina custa −${RULES.refineDiscount}`, D >= RULES.refine && !p.divineDiscount, [g('dracmas', -RULES.refine), { t: 'divineDiscount', p: id }]),
       ];
     case G.dionisio:
       return [
-        opt('Êxtase: +5 Dracmas, +2 Húbris e mão nova de 6 cartas', true, [g('dracmas', 5), g('hubris', 2), { t: 'newHand', p: id }]),
-        opt('Cassino Divino: apostar 1–3 Dracmas para tentar dobrar', D >= 1, [{
+        opt(`Êxtase: +${RULES.ecstasy} Dracmas, +2 Húbris e mão nova de 6 cartas`, true, [g('dracmas', RULES.ecstasy), g('hubris', 2), { t: 'newHand', p: id }]),
+        opt(`Cassino Divino: apostar ${RULES.casinoStep} a ${RULES.casinoStep * 3} Dracmas para tentar dobrar`, D >= RULES.casinoStep, [{
           t: 'choice', p: id, prompt: 'Cassino Divino: quanto apostar? (4, 5 ou 6 no dado dobram)',
-          options: [1, 2, 3].map((bet) => ({ label: `${bet} Dracma${bet > 1 ? 's' : ''}`, disabled: D < bet, ops: [{ t: 'cassino', p: id, bet } as Op] })),
+          options: [1, 2, 3].map((k) => k * RULES.casinoStep).map((bet) => ({ label: `${bet} Dracmas`, disabled: D < bet, ops: [{ t: 'cassino', p: id, bet } as Op] })),
         }]),
       ];
     case G.hermes:
       return [
-        opt('Comércio: vender 1 Glória por 5 Dracmas', p.gloria >= 1, [{ t: 'res', p: id, res: 'gloria', n: -1, raw: true }, g('dracmas', 5), { t: 'track', p: id, kind: 'trade' }]),
-        opt('Comércio: 3 Dracmas → 1 Favor', D >= 3, [g('dracmas', -3), g('favor', 1), { t: 'track', p: id, kind: 'trade' }]),
-        opt('Contrabando: 2 Dracmas → trocar até 3 cartas da mão', D >= 2 && p.hand.length > 0, [g('dracmas', -2), { t: 'swapUpTo', p: id, n: 3 }]),
+        opt(`Comércio: vender 1 Glória por ${RULES.sellGlory} Dracmas`, p.gloria >= 1, [{ t: 'res', p: id, res: 'gloria', n: -1, raw: true }, g('dracmas', RULES.sellGlory), { t: 'track', p: id, kind: 'trade' }]),
+        opt(`Comércio: ${RULES.favorBuy} Dracmas → 1 Favor`, D >= RULES.favorBuy, [g('dracmas', -RULES.favorBuy), g('favor', 1), { t: 'track', p: id, kind: 'trade' }]),
+        opt(`Contrabando: ${RULES.smuggle} Dracmas → trocar até 3 cartas da mão`, D >= RULES.smuggle && p.hand.length > 0, [g('dracmas', -RULES.smuggle), { t: 'swapUpTo', p: id, n: 3 }]),
       ];
     case G.demeter:
       return [
         opt(`Colheita: ${RULES.harvestCost} Dracmas → +${RULES.harvestYield} Dracmas por rodada durante ${RULES.harvestRounds} rodadas`, D >= RULES.harvestCost && !p.investments.some((i) => i.kind === 'harvest'), [g('dracmas', -RULES.harvestCost), { t: 'invest', p: id, kind: 'harvest' }]),
-        opt('Oferta da Terra: 3 Dracmas → +2 Favores', D >= 3, [g('dracmas', -3), g('favor', 2)]),
+        opt(`Oferta da Terra: ${RULES.offering} Dracmas → +2 Favores`, D >= RULES.offering, [g('dracmas', -RULES.offering), g('favor', 2)]),
       ];
     case G.afrodite:
       return [
-        opt('Persuasão: 3 Dracmas → +2 Favores', D >= 3, [g('dracmas', -3), g('favor', 2)]),
-        opt('Encantamento: 2 Favores → tomar 3 Dracmas de um adversário', F >= 2 && foes.some((f) => f.dracmas >= 3),
-          [g('favor', -2), { t: 'target', p: id, prompt: 'Encantar quem?', filter: 'rich3', ops: [{ t: 'transfer', from: T, to: id, res: 'dracmas', n: 3 }] }]),
+        opt(`Persuasão: ${RULES.persuade} Dracmas → +2 Favores`, D >= RULES.persuade, [g('dracmas', -RULES.persuade), g('favor', 2)]),
+        opt(`Encantamento: 2 Favores → tomar ${RULES.charm} Dracmas de um adversário`, F >= 2 && foes.some((f) => f.dracmas >= RULES.charm),
+          [g('favor', -2), { t: 'target', p: id, prompt: 'Encantar quem?', filter: 'rich3', ops: [{ t: 'transfer', from: T, to: id, res: 'dracmas', n: RULES.charm }] }]),
       ];
     default:
       return [
-        opt('Tesouro Submerso: 1d6, +2 a 7 Dracmas (resultado 1: +1 Húbris)', true, [{ t: 'templeRoll', p: id, kind: 'poseidon' }]),
-        opt('Travessia: 3 Dracmas → teletransporte para casa comum da região seguinte', D >= 3, [g('dracmas', -3), { t: 'teleport', p: id, kind: 'next' }]),
+        opt(`Tesouro Submerso: 1d6, +${1 + RULES.seaBonus} a ${6 + RULES.seaBonus} Dracmas (resultado 1: +1 Húbris)`, true, [{ t: 'templeRoll', p: id, kind: 'poseidon' }]),
+        opt(`Travessia: ${RULES.crossing} Dracmas → teletransporte para casa comum da região seguinte`, D >= RULES.crossing, [g('dracmas', -RULES.crossing), { t: 'teleport', p: id, kind: 'next' }]),
       ];
   }
 }
@@ -369,8 +370,8 @@ function playEffect(state: GameState, p: Player, cardId: number): Op[] {
   const card = CARDS[cardId];
   change(p, 'dracmas', -costFor(p, card, state));
   if (event(state, EV.atena) && card.suit === 'Espadas') p.used.atena = 1;
-  if (martelo(p, card)) p.used.martelo = 1;
-  else if (p.divineDiscount && card.use === 'D') p.divineDiscount = false;
+  if (p.divineDiscount && card.use === 'D') p.divineDiscount = false;
+  else if (martelo(p, card)) p.used.martelo = 1;
   else p.discountNext = false;
   discardCard(state, p, cardId);
   say(state, p.id, `${p.name} joga ${cardName(card)}: ${card.text}`);
@@ -484,7 +485,7 @@ export function walk(state: GameState, p: Player, path: number[]): MovementResul
       for (const def of node.onPass) {
         if (def.k === 'res' && def.res === 'dracmas' && def.n > 0) {
           // Ganhos de passagem têm teto por movimento; a Bênção de Deméter vale na primeira casa.
-          const bonus = !blessed && event(state, EV.demeter) ? 1 : 0;
+          const bonus = !blessed && event(state, EV.demeter) ? RULES.eventBonus : 0;
           blessed = true;
           const n = Math.min(def.n + bonus, RULES.passDracmaCap - passGained);
           if (n <= 0) continue;
@@ -500,8 +501,8 @@ export function walk(state: GameState, p: Player, path: number[]): MovementResul
     // Bônus de relíquia de passagem vêm depois do efeito da casa.
     if (node.region !== region && has(p, G.poseidon) && (p.used.trident ?? 0) < 2) {
       p.used.trident = (p.used.trident ?? 0) + 1;
-      change(p, 'dracmas', 1);
-      result.events.push({ node: id, text: 'Tridente de Poseidon: +1 Dracma' });
+      change(p, 'dracmas', RULES.tridentGain);
+      result.events.push({ node: id, text: `Tridente de Poseidon: +${RULES.tridentGain} Dracmas` });
     }
     region = node.region;
   });
@@ -517,11 +518,13 @@ function judgement(state: GameState, p: Player): Op[] {
   }
   say(state, id, `Nêmesis julga ${p.name} (Húbris ${p.hubris}).`);
   if (arco(state, p)) return [];
-  if (p.hubris <= 3) return [{ t: 'res', p: id, res: 'dracmas', n: -2 }];
-  if (p.hubris >= 6 || p.dracmas < RULES.nemesisFine) return [{ t: 'jail', p: id }];
+  // Cada ponto de Húbris soma 1 Dracma ao que Nêmesis cobra.
+  if (p.hubris <= 3) return [{ t: 'res', p: id, res: 'dracmas', n: -(RULES.judgementLoss + p.hubris) }];
+  const fine = RULES.nemesisFine + p.hubris;
+  if (p.hubris >= 6 || p.dracmas < fine) return [{ t: 'jail', p: id }];
   return [{
     t: 'choice', p: id, prompt: 'Nêmesis exige reparação', options: [
-      { label: `Pagar ${RULES.nemesisFine} Dracmas`, ops: [{ t: 'res', p: id, res: 'dracmas', n: -RULES.nemesisFine }] },
+      { label: `Pagar ${fine} Dracmas`, ops: [{ t: 'res', p: id, res: 'dracmas', n: -fine }] },
       { label: 'Ir ao Tártaro', ops: [{ t: 'jail', p: id }] },
     ],
   }];
@@ -557,7 +560,7 @@ function land(state: GameState, p: Player): Op[] {
         let n = def.min + Math.floor(rand(state) * (def.max - def.min + 1));
         if (event(state, EV.poseidon) && !p.used.mare) {
           p.used.mare = 1;
-          n++;
+          n += RULES.eventBonus;
         }
         change(p, 'dracmas', n);
         say(state, id, `Tesouro: ${p.name} encontra ${n} Dracmas.`);
@@ -600,8 +603,8 @@ function land(state: GameState, p: Player): Op[] {
         ops.push({
           t: 'choice', p: id, prompt: 'Delfos', options: [
             { label: 'Ver 2 cartas do Destino (grátis)', ops: [{ t: 'peek', p: id, deck: 'destiny', n: 2, reorder: false }] },
-            { label: 'Pagar 2 Dracmas: +1 Favor', ops: [{ t: 'res', p: id, res: 'dracmas', n: -2 }, { t: 'res', p: id, res: 'favor', n: 1 }], disabled: p.dracmas < 2 },
-            { label: 'Pagar 3 Dracmas: comprar 2 e descartar 2', ops: [{ t: 'res', p: id, res: 'dracmas', n: -3 }, { t: 'draw', p: id, n: 2 }, { t: 'discard', p: id, n: 2 }], disabled: p.dracmas < 3 },
+            { label: `Pagar ${RULES.delphiFavor} Dracmas: +1 Favor`, ops: [{ t: 'res', p: id, res: 'dracmas', n: -RULES.delphiFavor }, { t: 'res', p: id, res: 'favor', n: 1 }], disabled: p.dracmas < RULES.delphiFavor },
+            { label: `Pagar ${RULES.delphiCycle} Dracmas: comprar 2 e descartar 2`, ops: [{ t: 'res', p: id, res: 'dracmas', n: -RULES.delphiCycle }, { t: 'draw', p: id, n: 2 }, { t: 'discard', p: id, n: 2 }], disabled: p.dracmas < RULES.delphiCycle },
           ],
         });
         break;
@@ -631,12 +634,15 @@ function election(state: GameState): void {
   state.oracle = { holder: tied ? null : first.id, weaveUsed: false, protectUsed: false };
   state.elections.push({ round: state.round, winner: tied ? null : first.id, votes: state.players.map(votes) });
   for (const p of state.players) p.decree = false; // a proteção política vale até a eleição
+  const spend = (): void => state.players.forEach((p) => change(p, 'favor', -Math.floor(p.favor * RULES.electionFavorLoss)));
   if (tied) {
     say(state, null, `Eleição em Delfos (${tally}): empate. O cargo de Oráculo fica vago.`);
+    spend();
   } else {
     change(first, 'gloria', 1);
     say(state, first.id, `Eleição em Delfos (${tally}): ${first.name} é o Oráculo e ganha 1 Glória.`);
     track(state, first, 'election');
+    spend();
   }
 }
 
@@ -665,7 +671,7 @@ function roundEnd(state: GameState): void {
   }
   // 2. Efeitos de fim de rodada.
   for (const p of state.players) {
-    if (event(state, EV.zeus) && p.hubris >= 5) change(p, 'dracmas', -1);
+    if (event(state, EV.zeus) && p.hubris >= 5) change(p, 'dracmas', -RULES.eventBonus);
     if (state.round % 3 === 0 && has(p, G.afrodite)) change(p, 'favor', 1);
   }
   state.traps = state.traps.filter((t) => t.expiresAtRound > state.round);
@@ -681,7 +687,7 @@ function roundEnd(state: GameState): void {
   state.round++;
   for (const p of state.players) {
     p.used = {};
-    if (has(p, G.demeter)) change(p, 'dracmas', 1);
+    if (has(p, G.demeter)) change(p, 'dracmas', RULES.scytheGain);
   }
 }
 
@@ -730,7 +736,7 @@ function exec(state: GameState, op: Op): Op[] | null {
     }
     case 'target': {
       const pool = op.sab ? sabotageTargets(state, op.p) : others(state, op.p);
-      const list = pool.filter((id) => (op.filter === 'free' ? !P(id).jailed : op.filter === 'rich3' ? P(id).dracmas >= 3 : true));
+      const list = pool.filter((id) => (op.filter === 'free' ? !P(id).jailed : op.filter === 'rich3' ? P(id).dracmas >= RULES.charm : true));
       if (list.length === 0) return [];
       // Sabotagem: conta nos limites e pode ser anulada pelo Decreto de Proteção.
       const hit = (id: number): Op[] => {
@@ -982,11 +988,11 @@ function exec(state: GameState, op: Op): Op[] | null {
         } else {
           result = `${a.name} vence, mas não há Glória a tomar.`;
         }
-      } else if (fa > fd) result = `${a.name} vence e toma ${change(a, 'dracmas', -change(d, 'dracmas', -2))} Dracmas.`;
+      } else if (fa > fd) result = `${a.name} vence e toma ${change(a, 'dracmas', -change(d, 'dracmas', -RULES.duelPrize))} Dracmas.`;
       else if (fd > fa) result = `${d.name} vence e recebe ${change(d, 'favor', -change(a, 'favor', -1))} Favor.`;
       if (fa !== fd) {
         const winner = fa > fd ? a : d;
-        if (event(state, EV.ares)) change(winner, 'dracmas', 1);
+        if (event(state, EV.ares)) change(winner, 'dracmas', RULES.eventBonus);
         track(state, winner, 'duelWin');
         if (winner === a) track(state, a, 'duelWinAttacker');
       }
@@ -999,7 +1005,7 @@ function exec(state: GameState, op: Op): Op[] | null {
     case 'templeRoll': {
       const p = P(op.p);
       const roll = d6(state);
-      const gain = op.kind === 'artemis' ? Math.min(roll, 5) : roll + 1;
+      const gain = roll + (op.kind === 'artemis' ? RULES.huntBonus : RULES.seaBonus);
       change(p, 'dracmas', gain);
       if (roll === 1) change(p, 'hubris', 1);
       say(state, p.id, `${p.name} tira ${roll}: +${gain} Dracma${gain > 1 ? 's' : ''}${roll === 1 ? ' e +1 Húbris' : ''}.`);
@@ -1024,7 +1030,7 @@ function exec(state: GameState, op: Op): Op[] | null {
       const p = P(op.p);
       const bet = -change(p, 'dracmas', -op.bet);
       const roll = d6(state);
-      const prize = bet * 2 + (event(state, EV.festival) ? 1 : 0);
+      const prize = bet * 2 + (event(state, EV.festival) ? RULES.eventBonus : 0);
       if (roll >= 4) {
         change(p, 'dracmas', prize);
         track(state, p, 'betGain', prize - bet);
@@ -1035,7 +1041,7 @@ function exec(state: GameState, op: Op): Op[] | null {
     case 'invest': {
       const p = P(op.p);
       p.investments.push(op.kind === 'forge'
-        ? { kind: 'forge', incomePerRound: 1, remainingRounds: RULES.forgeTotal, received: 0 }
+        ? { kind: 'forge', incomePerRound: RULES.forgeYield, remainingRounds: RULES.forgeRounds, received: 0 }
         : { kind: 'harvest', incomePerRound: RULES.harvestYield, remainingRounds: RULES.harvestRounds, received: 0 });
       return [];
     }
@@ -1057,7 +1063,7 @@ function exec(state: GameState, op: Op): Op[] | null {
       const of = P(op.of);
       const kind = op.kind as SabotageKind;
       say(state, by.id, `${by.name} sabota ${of.name}: ${SABOTAGES[kind].name}.`);
-      if (kind === 'roubo') change(by, 'dracmas', -change(of, 'dracmas', -2));
+      if (kind === 'roubo') change(by, 'dracmas', -change(of, 'dracmas', -RULES.theft));
       else if (kind === 'maldicao') change(of, 'hubris', 1);
       else if (kind === 'bloqueio') of.blocked = true;
       else if (kind === 'politica') change(of, 'favor', -1);
@@ -1224,8 +1230,8 @@ export function apply(state: GameState, cmd: Command): void {
       } else if (cmd.power === 'taca') {
         p.used.taca = 1;
         change(p, 'hubris', -1);
-        change(p, 'dracmas', 2);
-        say(state, p.id, `${p.name} bebe da Taça de Dionísio: −1 Húbris, +2 Dracmas.`);
+        change(p, 'dracmas', RULES.cupGain);
+        say(state, p.id, `${p.name} bebe da Taça de Dionísio: −1 Húbris, +${RULES.cupGain} Dracmas.`);
       } else {
         p.relics.splice(p.relics.indexOf(G.zeus), 1);
         change(p, 'gloria', 3);
@@ -1314,7 +1320,7 @@ export function deserialize(json: string): GameState {
     for (const p of state.players) {
       const old = (p as unknown as { invest?: { forge: number; harvest: number } }).invest ?? { forge: 0, harvest: 0 };
       p.investments = [];
-      if (old.forge > 0) p.investments.push({ kind: 'forge', incomePerRound: 1, remainingRounds: old.forge, received: RULES.forgeTotal - old.forge });
+      if (old.forge > 0) p.investments.push({ kind: 'forge', incomePerRound: RULES.forgeYield, remainingRounds: old.forge, received: 0 });
       if (old.harvest > 0) p.investments.push({ kind: 'harvest', incomePerRound: RULES.harvestYield, remainingRounds: old.harvest, received: (RULES.harvestRounds - old.harvest) * RULES.harvestYield });
       delete (p as unknown as { invest?: unknown }).invest;
       Object.assign(p, { decree: false, sabDone: false, blocked: false, contract: null, contractsDone: [] });

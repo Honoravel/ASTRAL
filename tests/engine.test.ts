@@ -4,7 +4,7 @@ import { buildBoard, DIST, NODES, reach, RETURNS, SHORTCUTS, TARTARUS, templeOf 
 import { CARDS } from '../src/engine/cards';
 import { G, GODS, SIGNS } from '../src/engine/data';
 import { DESTINIES } from '../src/engine/destiny';
-import { altarFavor, EV, EVENTS } from '../src/engine/config';
+import { altarFavor, EV, EVENTS, TRAPS } from '../src/engine/config';
 import { apply, costFor, deserialize, effectBlock, newGame, RULES, sabotageTargets, serialize, TRAP_NODES, walk } from '../src/engine/game';
 import type { GameState, HouseType } from '../src/engine/types';
 
@@ -88,8 +88,10 @@ describe('cartas', () => {
   it('são 56 Arcanos Menores (24 U, 20 E, 12 D) e 22 Arcanos Maiores', () => {
     expect(CARDS).toHaveLength(56);
     expect(['U', 'E', 'D'].map((u) => CARDS.filter((c) => c.use === u).length)).toEqual([24, 20, 12]);
-    expect(CARDS.slice(0, 14).map((c) => c.move)).toEqual([1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 2, 5, 3, 6]);
-    expect(CARDS.slice(0, 14).map((c) => c.cost)).toEqual([0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 2, 3, 4, 5]);
+    expect(CARDS.slice(0, 14).map((c) => c.move)).toEqual([1, 2, 3, 4, 5, 6, 3, 3, 3, 4, 2, 5, 3, 4]);
+    expect(CARDS.filter((c) => c.move === 3)).toHaveLength(20); // movimento concentrado em 3 passos
+    expect(CARDS.slice(0, 14).map((c) => c.cost)).toEqual([4, 1, 1, 8, 2, 2, 10, 8, 8, 14, 2, 3, 8, 18]); // cartas de Glória rebalanceadas
+    expect([27, 41, 55].map((id) => CARDS[id].cost)).toEqual([15, 11, 12]);
     expect(new Set(CARDS.filter((c) => c.use === 'D').map((c) => c.god)).size).toBe(12);
     expect(DESTINIES).toHaveLength(22);
   });
@@ -97,9 +99,9 @@ describe('cartas', () => {
   it('dá −1 Dracma no naipe do elemento do signo, com mínimo 0', () => {
     const g = game();
     const leo = g.players[0]; // Leão, fogo → Paus
-    expect(costFor(leo, CARDS[13])).toBe(4);
-    expect(costFor(leo, CARDS[27])).toBe(5);
-    expect(costFor(leo, CARDS[0])).toBe(0);
+    expect(costFor(leo, CARDS[13])).toBe(17);
+    expect(costFor(leo, CARDS[27])).toBe(15);
+    expect(costFor(leo, CARDS[1])).toBe(0);
   });
 
   it('resolve o efeito de todas as 56 cartas sem deixar recursos negativos', () => {
@@ -153,7 +155,7 @@ describe('turno e casas', () => {
     p.pos = 0;
     p.hand[0] = 1; // 2 passos: passa pela 01 (Dracmas, +1) e para na 02 (Comum)
     apply(g, { type: 'PLAY_CARD_MOVE', card: 1, dest: 2 });
-    expect(p.dracmas).toBe(RULES.startDracmas + 1);
+    expect(p.dracmas).toBe(RULES.startDracmas + RULES.dracmasPass);
     expect(g.lastMove).toMatchObject({ path: [1, 2], passedNodes: [1], destination: 2 });
 
     const h = game();
@@ -177,8 +179,8 @@ describe('turno e casas', () => {
     const h = game();
     h.players[0].pos = 0;
     h.players[0].hand[0] = 0;
-    apply(h, { type: 'PLAY_CARD_MOVE', card: 0, dest: 1 }); // para em Dracmas: +2, não +1 e +2
-    expect(h.players[0].dracmas).toBe(RULES.startDracmas + 2);
+    apply(h, { type: 'PLAY_CARD_MOVE', card: 0, dest: 1 }); // para em Dracmas: só o valor de parada
+    expect(h.players[0].dracmas).toBe(RULES.startDracmas + RULES.dracmasStop);
   });
 
   it('cobra pedágio sem saldo: paga o que tiver e ganha 1 Húbris por casa', () => {
@@ -216,7 +218,7 @@ describe('turno e casas', () => {
     const p = g.players[0];
     p.pos = 0;
     const move = walk(g, p, [1, 2, 1, 2]);
-    expect(p.dracmas).toBe(RULES.startDracmas + 2);
+    expect(p.dracmas).toBe(RULES.startDracmas + 2 * RULES.dracmasPass);
     expect(move.events).toHaveLength(2);
   });
 
@@ -280,7 +282,7 @@ describe('turno e casas', () => {
     stepTo(g, templeOf(G.dionisio) - 1);
     expect(g.pending?.prompt).toBe('Templo de Dionísio');
     apply(g, { type: 'ANSWER', value: 0 }); // Êxtase
-    expect(p).toMatchObject({ dracmas: 15, hubris: 2 });
+    expect(p).toMatchObject({ dracmas: 10 + RULES.ecstasy, hubris: 2 });
     expect(p.hand).toHaveLength(RULES.hand);
     expect(g.current).toBe(1);
   });
@@ -317,18 +319,20 @@ describe('turno e casas', () => {
       return g.players[0];
     };
     expect(run(1, 5).dracmas).toBe(5);
-    expect(run(3, 5).dracmas).toBe(3);
+    // Cada ponto de Húbris soma 1 Dracma à cobrança.
+    expect(run(2, 20).dracmas).toBe(20 - RULES.judgementLoss - 2);
+    expect(run(3, 20).dracmas).toBe(20 - RULES.judgementLoss - 3);
     expect(run(3, 1).dracmas).toBe(0);
-    expect(run(4, 3).jailed).toBe(true);
+    expect(run(4, RULES.nemesisFine + 3).jailed).toBe(true); // a multa é 6 + 4: não tem como pagar
     expect(run(6, 30).pos).toBe(TARTARUS);
-    const paid = run(5, 9);
-    expect(paid.jailed || paid.dracmas === 5).toBe(true);
+    const paid = run(5, 20);
+    expect(paid.jailed || paid.dracmas === 20 - RULES.nemesisFine - 5).toBe(true);
   });
 
   it('oferece as três saídas do Tártaro', () => {
     const jailed = () => {
       const g = game();
-      Object.assign(g.players[1], { jailed: true, pos: TARTARUS, hubris: 3, gloria: 2, dracmas: 5 });
+      Object.assign(g.players[1], { jailed: true, pos: TARTARUS, hubris: 3, gloria: 2, dracmas: 10 });
       stepTo(g, 0);
       expect(g.pending?.kind).toBe('choice');
       return g;
@@ -339,7 +343,7 @@ describe('turno e casas', () => {
     expect(g.current).toBe(0);
     g = jailed();
     apply(g, { type: 'ANSWER', value: 1 });
-    expect(g.players[1]).toMatchObject({ jailed: false, dracmas: 1 });
+    expect(g.players[1]).toMatchObject({ jailed: false, dracmas: 10 - RULES.bail });
     expect(g.current).toBe(1);
     expect(g.phase).toBe('CHOOSE_ACTION');
     g = jailed();
@@ -370,7 +374,7 @@ describe('Oráculo, relíquias e duelos', () => {
     toElection(g);
     expect(g.oracle.holder).toBe(1);
     expect(g.players[1].gloria).toBe(1);
-    expect(g.players[1].favor).toBe(3);
+    expect(g.players.map((p) => p.favor)).toEqual([1, 2, 1]); // após a votação, cada um perde metade do Favor
 
     g = game(3);
     g.players.forEach((p, i) => (p.favor = [2, 3, 3][i]));
@@ -396,7 +400,7 @@ describe('Oráculo, relíquias e duelos', () => {
     expect(p.relics).toEqual([G.apolo, G.ares]);
     expect(g.stock[G.hera]).toBe(true);
     expect(g.stock[G.ares]).toBe(false);
-    expect(p.dracmas).toBe(14);
+    expect(p.dracmas).toBe(20 - GODS[G.ares].relic.price);
   });
 
   it('duela com lances secretos, consome o Favor e respeita o empate', () => {
@@ -415,7 +419,7 @@ describe('Oráculo, relíquias e duelos', () => {
       return [a, d];
     };
     let [a, d] = duel(2, 1);
-    expect([a.favor, d.favor, a.dracmas, d.dracmas]).toEqual([1, 2, 7, 3]);
+    expect([a.favor, d.favor, a.dracmas, d.dracmas]).toEqual([1, 2, 5 + RULES.duelPrize, 5 - RULES.duelPrize]);
     [a, d] = duel(1, 1);
     expect([a.favor, d.favor, a.dracmas, d.dracmas]).toEqual([2, 2, 5, 5]);
     [a, d] = duel(0, 2);
@@ -441,7 +445,7 @@ describe('templos v1.8', () => {
     expect(labels[0]).toMatch(/^Persuasão/);
     expect(labels[1]).toMatch(/^Encantamento/);
     apply(g, { type: 'ANSWER', value: 0 });
-    expect(g.players[0]).toMatchObject({ dracmas: 17, favor: 7 });
+    expect(g.players[0]).toMatchObject({ dracmas: 20 - RULES.persuade, favor: 7 });
     expect(g.current).toBe(1);
   });
 
@@ -450,7 +454,7 @@ describe('templos v1.8', () => {
     rich(g);
     arrive(g, G.zeus);
     apply(g, { type: 'ANSWER', value: 0 });
-    expect(g.players[0]).toMatchObject({ gloria: 2, hubris: 1, dracmas: 14, gloryRound: 1 });
+    expect(g.players[0]).toMatchObject({ gloria: 2, hubris: 1, dracmas: 20 - RULES.zeusCost, gloryRound: 1 });
     g.current = 0;
     g.round = 3;
     arrive(g, G.zeus);
@@ -469,11 +473,11 @@ describe('templos v1.8', () => {
     arrive(g, G.hefesto);
     apply(g, { type: 'ANSWER', value: 0 });
     const p = g.players[0];
-    expect(p.dracmas).toBe(15);
-    expect(p.investments).toEqual([{ kind: 'forge', incomePerRound: 1, remainingRounds: RULES.forgeTotal, received: 0 }]);
+    expect(p.dracmas).toBe(20 - RULES.forgeCost);
+    expect(p.investments).toEqual([{ kind: 'forge', incomePerRound: RULES.forgeYield, remainingRounds: RULES.forgeRounds, received: 0 }]);
     apply(g, { type: 'END_TURN' }); // fecha a rodada 1
-    expect(p.dracmas).toBe(16);
-    expect(p.investments[0]).toMatchObject({ remainingRounds: RULES.forgeTotal - 1, received: 1 });
+    expect(p.dracmas).toBe(20 - RULES.forgeCost + RULES.forgeYield);
+    expect(p.investments[0]).toMatchObject({ remainingRounds: RULES.forgeRounds - 1, received: RULES.forgeYield });
     arrive(g, G.hefesto);
     expect(g.pending!.options![0].disabled).toBe(true);
     apply(g, { type: 'ANSWER', value: g.pending!.options!.length - 1 });
@@ -487,7 +491,7 @@ describe('templos v1.8', () => {
       apply(g, { type: 'END_TURN' });
     }
     expect(p.investments.some((i) => i.kind === 'harvest')).toBe(false);
-    expect(p.dracmas - before).toBe(RULES.harvestRounds * RULES.harvestYield + 6);
+    expect(p.dracmas - before).toBe(RULES.harvestRounds * RULES.harvestYield + 6 * RULES.forgeYield);
   });
 
   it('Confronto de Ares duela à distância por 1 Glória e respeita escudo e limite de duelo', () => {
@@ -505,7 +509,7 @@ describe('templos v1.8', () => {
     };
     let [a, d] = fight(false);
     expect([a.gloria, d.gloria, a.duelDone]).toEqual([4, 2, true]);
-    expect(a).toMatchObject({ dracmas: 18, favor: 1 });
+    expect(a).toMatchObject({ dracmas: 20 - RULES.confront, favor: 1 });
     [a, d] = fight(true);
     expect([a.gloria, d.gloria, d.shield]).toEqual([3, 3, false]);
   });
@@ -535,7 +539,7 @@ describe('templos v1.8', () => {
     const at = labels.findIndex((l) => l.startsWith('Jogar Rainha de Copas'));
     expect(at).toBeGreaterThan(0);
     apply(g, { type: 'ANSWER', value: at });
-    expect(p).toMatchObject({ gloria: 2, favor: 7, dracmas: 16 });
+    expect(p).toMatchObject({ gloria: 2, favor: 7, dracmas: 20 - CARDS[26].cost });
     expect(p.hand).not.toContain(26);
 
     const h = game();
@@ -575,7 +579,7 @@ describe('sistemas estratégicos v1.9', () => {
     expect(() => trap(g, 52)).toThrow(); // Tártaro
     expect(TRAP_NODES).toHaveLength(96 - 12 - 4 - 2);
     trap(g, 5);
-    expect(p.dracmas).toBe(18);
+    expect(p.dracmas).toBe(20 - TRAPS[0].cost);
     expect(p.hand).toHaveLength(5);
     expect(g.current).toBe(1);
     expect(g.traps).toEqual([{ id: 1, owner: 0, node: 5, kind: 0, expiresAtRound: 1 + RULES.trapRounds }]);
@@ -597,14 +601,14 @@ describe('sistemas estratégicos v1.9', () => {
     Object.assign(p, { pos: 0, dracmas: 5, hubris: 0 });
     p.hand[0] = 1;
     apply(g, { type: 'PLAY_CARD_MOVE', card: 1, dest: 2 });
-    expect(p).toMatchObject({ pos: 2, dracmas: 6, hubris: 1 });
+    expect(p).toMatchObject({ pos: 2, dracmas: 5 + RULES.dracmasPass, hubris: 1 });
     expect(g.traps.map((t) => t.node)).toEqual([1]);
     expect(g.lastTrap).toMatchObject({ node: 2, owner: 1, victim: 0 });
-    // O jogador 1 atravessa a casa 01: perde 2 Dracmas na armadilha e depois recebe a passagem (+1).
+    // O jogador 1 atravessa a casa 01: primeiro a armadilha (−4 Dracmas), depois a passagem (+3).
     Object.assign(q, { pos: 0, dracmas: 5 });
     q.hand[0] = 1;
     apply(g, { type: 'PLAY_CARD_MOVE', card: 1, dest: 2 });
-    expect(q).toMatchObject({ pos: 2, dracmas: 4 });
+    expect(q).toMatchObject({ pos: 2, dracmas: 5 - 4 + RULES.dracmasPass });
     expect(g.traps).toHaveLength(0);
     expect(g.lastMove!.events.map((e) => e.node)).toEqual([1, 1]);
   });
@@ -653,21 +657,21 @@ describe('sistemas estratégicos v1.9', () => {
     const at = g.pending!.options!.findIndex((o) => o.label.startsWith('Intriga'));
     apply(g, { type: 'ANSWER', value: at });
     expect(b).toMatchObject({ favor: 3, decree: false });
-    expect(a.dracmas).toBe(7);
+    expect(a.dracmas).toBe(10 - RULES.intrigue);
     apply(g, { type: 'END_TURN' });
     stepTo(g, templeOf(G.atena) - 1);
     apply(g, { type: 'ANSWER', value: at });
     expect(b.favor).toBe(2);
   });
 
-  it('limita o Favor a 10 e registra o histórico das eleições', () => {
+  it('limita o Favor ao teto e registra o histórico das eleições', () => {
     const g = game();
-    g.players[0].favor = 9;
+    g.players[0].favor = RULES.favorCap - 1;
     stepTo(g, 3); // casa 04: Favor +2
     expect(g.players[0].favor).toBe(RULES.favorCap);
     g.round = RULES.electionEvery;
     apply(g, { type: 'END_TURN' });
-    expect(g.elections).toEqual([{ round: 6, winner: 0, votes: [10, 1] }]);
+    expect(g.elections).toEqual([{ round: 6, winner: 0, votes: [RULES.favorCap, RULES.startFavor] }]);
     expect(g.oracle.holder).toBe(0);
   });
 
@@ -727,7 +731,7 @@ describe('sistemas estratégicos v1.9', () => {
     let g = on(EV.demeter);
     g.players[0].pos = 0;
     walk(g, g.players[0], [1, 12, 2]);
-    expect(g.players[0].dracmas).toBe(RULES.startDracmas + 3); // +2 na primeira casa de Dracmas, +1 na segunda
+    expect(g.players[0].dracmas).toBe(RULES.startDracmas + RULES.passDracmaCap); // 3 + 2 de bênção na primeira casa; a segunda esbarra no teto
 
     g = on(EV.atena);
     const leo = g.players[0];
@@ -740,11 +744,11 @@ describe('sistemas estratégicos v1.9', () => {
     Object.assign(g.players[0], { hubris: 5, dracmas: 3 });
     apply(g, { type: 'END_TURN' });
     apply(g, { type: 'END_TURN' });
-    expect(g.players[0].dracmas).toBe(2);
+    expect(g.players[0].dracmas).toBe(3 - RULES.eventBonus);
 
     g = on(EV.poseidon);
     stepTo(g, 87); // Tesouro
-    expect(g.players[0].dracmas - RULES.startDracmas).toBeGreaterThanOrEqual(RULES.treasureMin + 1);
+    expect(g.players[0].dracmas - RULES.startDracmas).toBeGreaterThanOrEqual(RULES.treasureMin + RULES.eventBonus);
   });
 
   it('contratos: desligados por padrão; ligados, concluem exatamente uma vez', () => {
@@ -835,6 +839,6 @@ describe('propriedades', () => {
     expect(migrated.players[0]).toMatchObject({ investments: [], duelBonus: 0, gloryRound: null, contract: null });
     expect(migrated).toMatchObject({ traps: [], globalEvent: null, elections: [] });
     stepTo(migrated, 0);
-    expect(migrated.players[0].dracmas).toBe(RULES.startDracmas + 2);
+    expect(migrated.players[0].dracmas).toBe(RULES.startDracmas + RULES.dracmasStop);
   });
 });

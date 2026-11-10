@@ -18,8 +18,8 @@ function worth(state: GameState, p: Player): number {
   const toElection = RULES.electionEvery - ((state.round - 1) % RULES.electionEvery);
   const favorWeight = toElection <= 2 ? 2.4 : 1.5;
   const income = p.investments.reduce((a, i) => a + i.incomePerRound * i.remainingRounds, 0) * 0.7;
-  return p.gloria * 10 + Math.min(p.dracmas, 8) + Math.min(Math.max(0, p.dracmas - 8), 6) * 0.4 + p.favor * favorWeight - hubrisRisk(p.hubris) + income + (p.decree ? 1 : 0)
-    + p.relics.length * 7 + p.hand.length * 0.8 - (p.jailed ? 9 : 0) + (state.oracle.holder === p.id ? 2 : 0);
+  return p.gloria * 10 + Math.min(p.dracmas, 18) * 0.7 + Math.min(Math.max(0, p.dracmas - 18), 14) * 0.25 + p.favor * favorWeight - hubrisRisk(p.hubris) + income + (p.decree ? 1 : 0)
+    + p.relics.reduce((a, r) => a + GODS[r].relic.price * 0.95, 0) + p.hand.length * 0.8 - (p.jailed ? 9 : 0) + (state.oracle.holder === p.id ? 2 : 0);
 }
 
 /** Valor aproximado de uma lista de passos para quem decide (usado nas escolhas). */
@@ -39,7 +39,7 @@ function opsValue(state: GameState, me: number, ops: Op[]): number {
       case 'discard': v -= op.n * 0.5; break;
       case 'jail': v -= op.p === me ? 9 : -4; break;
       case 'endTurn': v -= 5; break;
-      case 'buy': v += 3; break;
+      case 'buy': v += GODS[op.relic].relic.price * 0.95; break;
       case 'altar': v += [1.5, 2.25, 2.5][op.bet - 1] - op.bet; break;
       case 'shield': v += 2; break;
       case 'peek': v += 0.3; break;
@@ -47,10 +47,10 @@ function opsValue(state: GameState, me: number, ops: Op[]): number {
       case 'duel': v += op.stake === 'gloria' ? (state.players[me].favor >= 3 ? 5 : -2) : state.players[me].favor >= 2 && state.players[op.d].dracmas >= 2 ? 1.5 : -1; break;
       case 'target': v += opsValue(state, me, subst(op.ops, others(state, me)[0])); break;
       case 'choice': v += Math.max(0, ...op.options.filter((o) => !o.disabled).map((o) => opsValue(state, me, o.ops))); break;
-      case 'templeRoll': v += op.kind === 'artemis' ? 3 : 4.2; break;
+      case 'templeRoll': v += (3.5 + (op.kind === 'artemis' ? RULES.huntBonus : RULES.seaBonus)) * 0.7 - 0.5; break;
       case 'dispute': v += Math.min(state.players[op.of].favor, 2) * 1.2 - 1.2; break;
       case 'cassino': v += 0; break;
-      case 'invest': v += op.kind === 'forge' ? RULES.forgeTotal * 0.8 : RULES.harvestRounds * RULES.harvestYield * 0.8; break;
+      case 'invest': v += (op.kind === 'forge' ? RULES.forgeRounds * RULES.forgeYield : RULES.harvestRounds * RULES.harvestYield) * 0.6; break;
       case 'newHand': v += 0.5; break;
       case 'swapUpTo': v += 0.8; break;
       case 'duelBonus': v += state.players[me].duelBonus ? 0 : 1; break;
@@ -157,7 +157,7 @@ function approach(state: GameState, p: Player, dest: number, spent: number): num
  * preferindo bifurcações e casas logo antes de templos. Usa só informação pública.
  */
 function planTrap(state: GameState, p: Player): { cmd: Command; bias: number } | null {
-  if (p.hand.length === 0 || p.dracmas < 6) return null;
+  if (p.hand.length === 0 || p.dracmas < 12) return null;
   const rivals = others(state, p.id).map((id) => state.players[id]).filter((r) => !r.jailed && r.gloria >= p.gloria - 2);
   if (rivals.length === 0) return null;
   const rival = rivals.reduce((a, b) => (b.gloria > a.gloria ? b : a));

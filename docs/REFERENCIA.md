@@ -8,31 +8,31 @@ altere os dados no motor e gere de novo.
 | Parâmetro | Valor |
 |---|---|
 | Jogadores | 2 a 4, humanos e/ou IA |
-| Glória para vencer | 20 |
+| Glória para vencer | 30 |
 | Cartas na mão | 6 |
-| Recursos iniciais | 5 Dracmas, 1 Favor, 0 Húbris, 0 Glória |
-| Teto de Favor | 10 |
+| Recursos iniciais | 10 Dracmas, 2 Favor, 0 Húbris, 0 Glória |
+| Teto de Favor | 12 |
 | Relíquias por jogador | 2 |
 | Eleição do Oráculo | a cada 6 rodadas |
 | Evento global | a cada 6 rodadas, após a eleição (Ligado) |
-| Teto de Dracmas de passagem | 4 por movimento |
+| Teto de Dracmas de passagem | 6 por movimento |
 | Ira de Nêmesis | encerrar o turno com 6+ de Húbris leva ao Tártaro; a Húbris cai para 4 |
-| Suborno no Tártaro | 4 Dracmas |
-| Multa de Nêmesis (Húbris 4–5) | 4 Dracmas |
+| Suborno no Tártaro | 8 Dracmas |
+| Multa de Nêmesis (Húbris 4–5) | 6 Dracmas |
 | Aposta máxima em duelo | 3 Favores |
 | Ascensão de Zeus | 1 vez a cada 3 rodadas por jogador |
 | Armadilhas | 2 por jogador, 3 rodadas (Ligado) |
 | Sabotagens recebidas | no máximo 2 por rodada |
 | Sabotagem direta | Desligado |
-| Contratos divinos | Desligado; abandonar custa 2 Dracmas |
+| Contratos divinos | Desligado; abandonar custa 4 Dracmas |
 
 ## 2. Recursos
 
 | Recurso | Para que serve |
 |---|---|
-| Glória | Pontos de vitória: vence quem chegar a 20. |
+| Glória | Pontos de vitória: vence quem chegar a 30. |
 | Dracmas | Pagam efeitos de cartas, ações de templo, relíquias, armadilhas, pedágios e o suborno do Tártaro. |
-| Favor | Votos na eleição do Oráculo (não é gasto), apostas em duelos e algumas ações. Máximo 10. |
+| Favor | Votos na eleição do Oráculo (não é gasto), apostas em duelos e algumas ações. Máximo 12. |
 | Húbris | Risco acumulado: é cobrada em Nêmesis e pode levar ao Tártaro. |
 
 ## 3. Elementos e naipes
@@ -88,18 +88,18 @@ Só ao **chegar** ao templo por movimento. O jogador escolhe uma opção: ação
 
 | Deus | Ação principal | Efeito | Ação secundária | Efeito |
 |---|---|---|---|---|
-| Zeus | Ascensão | 6 Dracmas → +2 Glórias e +1 Húbris. Uma vez a cada 3 rodadas. | Decreto Olímpico | 3 Favores → +1 Glória. |
-| Hera | Influência | 2 Favores → 4 Dracmas, ou 5 Dracmas → 2 Favores. | Proteção Real | 2 Favores → escudo contra a próxima perda de Glória. |
-| Apolo | Visão Profética | 2 Dracmas → ver 3 cartas do Destino e reorganizá-las. | Purificação | 3 Dracmas → remover 2 Húbris. |
-| Ártemis | Caçada | Grátis: 1d6, ganha de 1 a 5 Dracmas. Resultado 1: +1 Húbris. | Caça Sagrada | 2 Dracmas → comprar 2 cartas e descartar 2. |
-| Atena | Julgamento | 3 Dracmas → disputar no dado 2 Favores de um adversário. Falha: +1 Húbris. | Estratégia | 2 Favores → ver 3 cartas do Destino e reorganizá-las. |
-| Ares | Confronto | 2 Dracmas e 1 Favor → duelo à distância valendo 1 Glória. | Preparação de Guerra | 2 Dracmas → +2 de força no próximo duelo. |
-| Hefesto | Forja | 5 Dracmas → +1 Dracma ao fim de cada rodada, até render 8. | Aprimoramento | 3 Dracmas → a próxima carta divina custa −1. |
-| Dionísio | Êxtase | Grátis: +5 Dracmas, +2 Húbris e troca a mão inteira por 6 cartas novas. | Cassino Divino | Aposte 1–3 Dracmas: com 4, 5 ou 6 no dado, recebe o dobro. |
-| Hermes | Comércio | Vender 1 Glória por 5 Dracmas, ou 3 Dracmas → 1 Favor. | Contrabando | 2 Dracmas → trocar até 3 cartas da mão. |
-| Deméter | Colheita | 4 Dracmas → +2 Dracmas por rodada durante 4 rodadas. | Oferta da Terra | 3 Dracmas → +2 Favores. |
-| Afrodite | Persuasão | 3 Dracmas → +2 Favores. | Encantamento | 2 Favores → tomar 3 Dracmas de um adversário que os tenha. |
-| Poseidon | Tesouro Submerso | Grátis: 1d6, ganha de 2 a 7 Dracmas. Resultado 1: +1 Húbris. | Travessia | 3 Dracmas → teletransporte para uma casa comum da região seguinte. |
+| Zeus | Ascensão | 10 Dracmas → +2 Glórias e +1 Húbris. Uma vez a cada 3 rodadas. | Decreto Olímpico | 3 Favores → +1 Glória. |
+| Hera | Influência | 2 Favores → 8 Dracmas, ou 8 Dracmas → 2 Favores. | Proteção Real | 2 Favores → escudo contra a próxima perda de Glória. |
+| Apolo | Visão Profética | 4 Dracmas → ver 3 cartas do Destino e reorganizá-las. | Purificação | 5 Dracmas → remover 2 Húbris. |
+| Ártemis | Caçada | Grátis: 1d6, ganha dado + 2 Dracmas. Resultado 1: +1 Húbris. | Caça Sagrada | 4 Dracmas → comprar 2 cartas e descartar 2. |
+| Atena | Julgamento | 5 Dracmas → disputar no dado 2 Favores de um adversário. Falha: +1 Húbris. | Estratégia | 2 Favores → ver 3 cartas do Destino e reorganizá-las. |
+| Ares | Confronto | 4 Dracmas e 1 Favor → duelo à distância valendo 1 Glória. | Preparação de Guerra | 4 Dracmas → +2 de força no próximo duelo. |
+| Hefesto | Forja | 10 Dracmas → +2 Dracmas ao fim de cada rodada, por 8 rodadas. | Aprimoramento | 5 Dracmas → a próxima carta divina custa −3. |
+| Dionísio | Êxtase | Grátis: +8 Dracmas, +2 Húbris e troca a mão inteira por 6 cartas novas. | Cassino Divino | Aposte 2, 4 ou 6 Dracmas: com 4, 5 ou 6 no dado, recebe o dobro. |
+| Hermes | Comércio | Vender 1 Glória por 10 Dracmas, ou 4 Dracmas → 1 Favor. | Contrabando | 3 Dracmas → trocar até 3 cartas da mão. |
+| Deméter | Colheita | 8 Dracmas → +4 Dracmas por rodada durante 4 rodadas. | Oferta da Terra | 5 Dracmas → +2 Favores. |
+| Afrodite | Persuasão | 5 Dracmas → +2 Favores. | Encantamento | 2 Favores → tomar 5 Dracmas de um adversário que os tenha. |
+| Poseidon | Tesouro Submerso | Grátis: 1d6, ganha dado + 4 Dracmas. Resultado 1: +1 Húbris. | Travessia | 5 Dracmas → teletransporte para uma casa comum da região seguinte. |
 
 Ações políticas adicionais (v1.9):
 
@@ -113,37 +113,37 @@ Ações políticas adicionais (v1.9):
 
 | Relíquia | Templo | Preço | Efeito |
 |---|---|---|---|
-| Raio de Zeus | Zeus | 8 | Uma vez por partida: +3 Glórias e +2 Húbris; consumido. |
-| Coroa de Hera | Hera | 6 | +1 voto em eleição. |
-| Lira de Apolo | Apolo | 5 | Consulta a próxima carta do Destino, 1 vez/rodada. |
-| Arco de Ártemis | Ártemis | 6 | Ignora um efeito negativo de casa, 1 vez/rodada. |
-| Égide de Atena | Atena | 6 | Ignora a próxima perda de Glória, 1 vez/rodada. |
-| Lança de Ares | Ares | 6 | +1 força nos duelos. |
-| Martelo de Hefesto | Hefesto | 7 | −1 Dracma na primeira carta divina/rodada. |
-| Taça de Dionísio | Dionísio | 5 | Troca 1 Húbris por 2 Dracmas, 1 vez/rodada. |
-| Sandálias de Hermes | Hermes | 7 | Altera o movimento em +1 ou −1, 1 vez/rodada; mínimo 1. |
-| Foice de Deméter | Deméter | 5 | +1 Dracma no início de cada rodada. |
-| Cinto de Afrodite | Afrodite | 6 | +1 Favor a cada 3 rodadas. |
-| Tridente de Poseidon | Poseidon | 6 | +1 Dracma ao entrar em região nova; máximo 2/rodada. |
+| Raio de Zeus | Zeus | 18 | Uma vez por partida: +3 Glórias e +2 Húbris; consumido. |
+| Coroa de Hera | Hera | 12 | +1 voto em eleição. |
+| Lira de Apolo | Apolo | 10 | Consulta a próxima carta do Destino, 1 vez/rodada. |
+| Arco de Ártemis | Ártemis | 12 | Ignora um efeito negativo de casa, 1 vez/rodada. |
+| Égide de Atena | Atena | 12 | Ignora a próxima perda de Glória, 1 vez/rodada. |
+| Lança de Ares | Ares | 12 | +1 força nos duelos. |
+| Martelo de Hefesto | Hefesto | 14 | −2 Dracmas na primeira carta divina/rodada. |
+| Taça de Dionísio | Dionísio | 10 | Troca 1 Húbris por 4 Dracmas, 1 vez/rodada. |
+| Sandálias de Hermes | Hermes | 14 | Altera o movimento em +1 ou −1, 1 vez/rodada; mínimo 1. |
+| Foice de Deméter | Deméter | 10 | +2 Dracmas no início de cada rodada. |
+| Cinto de Afrodite | Afrodite | 12 | +1 Favor a cada 3 rodadas. |
+| Tridente de Poseidon | Poseidon | 12 | +2 Dracmas ao entrar em região nova; máximo 2 vezes/rodada. |
 
 ## 8. Tipos de casa
 
 | Tipo | Qtde. | Passagem | Parada | IDs |
 |---|---|---|---|---|
 | Comum | 12 | — | Nenhum efeito. | 00, 02, 05, 09, 13, 18, 21, 24, 28, 32, 37, 40 |
-| Dracmas | 10 | +1 Dracma | +2 Dracmas | 01, 12, 20, 31, 39, 49, 58, 71, 78, 84 |
-| Pedágio divino | 8 | −1 Dracma | −2 Dracmas. Sem saldo: paga o que tiver e ganha 1 Húbris | 42, 47, 50, 57, 60, 63, 66, 72 |
+| Dracmas | 10 | +3 Dracmas | +6 Dracmas | 01, 12, 20, 31, 39, 49, 58, 71, 78, 84 |
+| Pedágio divino | 8 | −2 Dracmas | −4 Dracmas. Sem saldo: paga o que tiver e ganha 1 Húbris | 42, 47, 50, 57, 60, 63, 66, 72 |
 | Favor | 8 | — | +2 Favores | 04, 16, 23, 34, 41, 55, 61, 74 |
-| Glória | 6 | +1 Glória | +2 Glórias | 07, 15, 25, 33, 44, 53 |
-| Provação | 6 | — | 1d6: 1 +2 Húbris · 2 −2 Dracmas · 3 −1 Favor · 4 +2 Dracmas · 5 +1 Glória · 6 +1 Favor e +1 Dracma | 77, 79, 80, 81, 85, 87 |
+| Glória | 6 | — | +2 Glórias | 07, 15, 25, 33, 44, 53 |
+| Provação | 6 | — | 1d6: 1 +2 Húbris · 2 −3 Dracmas · 3 −1 Favor · 4 +3 Dracmas · 5 +1 Glória · 6 +1 Favor e +2 Dracmas | 77, 79, 80, 81, 85, 87 |
 | Destino | 6 | — | Revela um Arcano Maior | 10, 29, 48, 69, 82, 93 |
-| Nêmesis | 4 | Com Húbris ≥ 4: −1 Dracma | Julgamento. Húbris 0–1: nada · 2–3: −2 Dracmas · 4–5: paga 4 Dracmas ou Tártaro · 6+: Tártaro | 14, 30, 46, 62 |
+| Nêmesis | 4 | Com Húbris ≥ 4: −1 Dracma | Julgamento. Húbris 0–1: nada · 2–3: perde 2 + Húbris em Dracmas · 4–5: paga 6 + Húbris ou Tártaro · 6+: Tártaro | 14, 30, 46, 62 |
 | Bifurcação | 6 | Escolha de rota: saída normal ou atalho para dentro | Nenhum efeito. | 06, 22, 38, 54, 70, 86 |
 | Templo | 12 | — | Ação divina (só ao chegar por movimento), comprar a relíquia ou nada | 03, 11, 19, 27, 35, 43, 51, 59, 67, 75, 83, 91 |
-| Evento | 6 | — | 1d6: 1 −2 Dracmas · 2 +2 Dracmas · 3 +1 Favor · 4 +1 Húbris · 5 −1 Húbris · 6 +1 Glória | 08, 17, 26, 36, 45, 56 |
+| Evento | 6 | — | 1d6: 1 −3 Dracmas · 2 +3 Dracmas · 3 +1 Favor · 4 +1 Húbris · 5 −1 Húbris · 6 +1 Glória | 08, 17, 26, 36, 45, 56 |
 | Altar | 6 | — | Aposte de 1 a 3 Dracmas e role 1d6, +1 por Dracma além do primeiro: 1–2 nada · 3–4 +1 Favor · 5 ou mais +2 Favores | 65, 76, 89, 90, 92, 95 |
-| Tesouro | 4 | — | +2 a 5 Dracmas | 64, 73, 88, 94 |
-| Delfos | 1 | — | Ver 2 cartas do Destino, ou pagar 2 Dracmas por 1 Favor, ou pagar 3 para comprar 2 e descartar 2 | 68 |
+| Tesouro | 4 | — | +4 a 8 Dracmas | 64, 73, 88, 94 |
+| Delfos | 1 | — | Ver 2 cartas do Destino, ou pagar 4 Dracmas por 1 Favor, ou pagar 5 para comprar 2 e descartar 2 | 68 |
 | Tártaro | 1 | — | Entrada comum, sem prisão. A prisão exige condenação. | 52 |
 
 ## 9. Tabelas de dado
@@ -153,18 +153,18 @@ Ações políticas adicionais (v1.9):
 | Dado | Efeito |
 |---|---|
 | 1 | +2 Húbris |
-| 2 | −2 Dracmas |
+| 2 | −3 Dracmas |
 | 3 | −1 Favor |
-| 4 | +2 Dracmas |
+| 4 | +3 Dracmas |
 | 5 | +1 Glória |
-| 6 | +1 Favor e +1 Dracma |
+| 6 | +1 Favor e +2 Dracmas |
 
 **Evento (1d6)**
 
 | Dado | Efeito |
 |---|---|
-| 1 | perde 2 Dracmas |
-| 2 | ganha 2 Dracmas |
+| 1 | perde 3 Dracmas |
+| 2 | ganha 3 Dracmas |
 | 3 | ganha 1 Favor |
 | 4 | ganha 1 Húbris |
 | 5 | remove 1 Húbris |
@@ -178,7 +178,7 @@ Ações políticas adicionais (v1.9):
 | 3–4 | +1 Favor |
 | 5 ou mais | +2 Favores |
 
-**Tesouro** — +2 a 5 Dracmas, sorteio uniforme.
+**Tesouro** — +4 a 8 Dracmas, sorteio uniforme.
 
 **Caçada de Ártemis (1d6)** — ganha o valor do dado em Dracmas, limitado a 5. Resultado 1: +1 Húbris.
 
@@ -195,11 +195,11 @@ Ações políticas adicionais (v1.9):
 | Passar por Nêmesis com Húbris ≥ 4 | Paga 1 Dracma; sem saldo, +1 Húbris |
 | Parar em Nêmesis com Húbris 0–1 | Nada |
 | Parar em Nêmesis com Húbris 2–3 | Perde até 2 Dracmas |
-| Parar em Nêmesis com Húbris 4–5 | Paga 4 Dracmas ou vai ao Tártaro |
+| Parar em Nêmesis com Húbris 4–5 | Paga 6 Dracmas ou vai ao Tártaro |
 | Parar em Nêmesis com Húbris 6+ | Tártaro |
 | Encerrar o turno com Húbris 6+ | Tártaro; a Húbris cai para 4 |
 | Tártaro: Penitência | Perde a ação, remove 2 Húbris e sai ao fim do turno |
-| Tártaro: Suborno | Paga 4 Dracmas, sai e age |
+| Tártaro: Suborno | Paga 8 Dracmas, sai e age |
 | Tártaro: Pacto Sombrio | Perde 1 Glória, ganha 2 Húbris, sai e age |
 
 ## 11. Mapa: as 96 casas
@@ -335,20 +335,20 @@ Cada carta serve para **mover** (descarta e anda exatamente o movimento) ou para
 
 | Carta | Mov. | Custo | Uso | Templos onde o efeito vale | Efeito | Sabotagem |
 |---|---|---|---|---|---|---|
-| Ás de Paus | 1 | 0 | Universal | Qualquer casa | Ganhe 1 Glória. | — |
+| Ás de Paus | 1 | 4 | Universal | Qualquer casa | Ganhe 1 Glória. | — |
 | 2 de Paus | 2 | 1 | Universal | Qualquer casa | Ganhe 2 Dracmas e 1 Húbris. | — |
 | 3 de Paus | 3 | 1 | Universal | Qualquer casa | Transfira até 1 Dracma de um adversário para você. | roubo |
-| 4 de Paus | 4 | 2 | Universal | Qualquer casa | Ganhe 2 Glórias e 1 Húbris. | — |
+| 4 de Paus | 4 | 8 | Universal | Qualquer casa | Ganhe 2 Glórias e 1 Húbris. | — |
 | 5 de Paus | 5 | 2 | Universal | Qualquer casa | Um adversário perde até 1 Favor; você ganha 1 Húbris. | politica |
 | 6 de Paus | 6 | 2 | Universal | Qualquer casa | Ganhe 3 Dracmas e 1 Húbris. | — |
-| 7 de Paus | 1 | 3 | Elemental | Zeus, Ares, Hefesto | Ganhe 3 Glórias e 2 Húbris. | — |
-| 8 de Paus | 2 | 3 | Elemental | Zeus, Ares, Hefesto | Ganhe 2 Glórias; adversário perde até 1 Glória. | ataque |
-| 9 de Paus | 3 | 3 | Elemental | Zeus, Ares, Hefesto | Ganhe 2 Glórias; com 3+ Húbris, ganhe mais 1. | — |
-| 10 de Paus | 4 | 3 | Elemental | Zeus, Ares, Hefesto | Ganhe 4 Glórias e 2 Húbris. | — |
+| 7 de Paus | 3 | 10 | Elemental | Zeus, Ares, Hefesto | Ganhe 3 Glórias e 2 Húbris. | — |
+| 8 de Paus | 3 | 8 | Elemental | Zeus, Ares, Hefesto | Ganhe 2 Glórias; adversário perde até 1 Glória. | ataque |
+| 9 de Paus | 3 | 8 | Elemental | Zeus, Ares, Hefesto | Ganhe 2 Glórias; com 3+ Húbris, ganhe mais 1. | — |
+| 10 de Paus | 4 | 14 | Elemental | Zeus, Ares, Hefesto | Ganhe 4 Glórias e 3 Húbris. | — |
 | Pajem de Paus | 2 | 2 | Elemental | Zeus, Ares, Hefesto, Ártemis | Remova 1 Húbris ou ganhe 1 Dracma. | — |
 | Cavaleiro de Paus | 5 | 3 | Divina: Ares | Ares, Ártemis | Roube até 3 Dracmas; ganhe 1 Húbris. | roubo |
-| Rainha de Paus | 3 | 4 | Divina: Hefesto | Hefesto | Ganhe 2 Glórias e um escudo para a próxima perda de Glória. | — |
-| Rei de Paus | 6 | 5 | Divina: Zeus | Zeus | Ganhe 5 Glórias e 2 Húbris. | — |
+| Rainha de Paus | 3 | 8 | Divina: Hefesto | Hefesto | Ganhe 2 Glórias e um escudo para a próxima perda de Glória. | — |
+| Rei de Paus | 4 | 18 | Divina: Zeus | Zeus | Ganhe 5 Glórias e 3 Húbris. | — |
 
 ### Copas — Água
 
@@ -360,14 +360,14 @@ Cada carta serve para **mover** (descarta e anda exatamente o movimento) ou para
 | 4 de Copas | 4 | 2 | Universal | Qualquer casa | Ganhe 2 Favores. | — |
 | 5 de Copas | 5 | 2 | Universal | Qualquer casa | Remova até 2 Húbris. | — |
 | 6 de Copas | 6 | 2 | Universal | Qualquer casa | Ganhe 1 Favor e 1 Dracma. | — |
-| 7 de Copas | 1 | 3 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 3 Favores. | — |
-| 8 de Copas | 2 | 3 | Elemental | Dionísio, Afrodite, Poseidon | Remova até 3 Húbris e ganhe 1 Favor. | — |
-| 9 de Copas | 3 | 3 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 2 Favores e 1 Glória. | — |
-| 10 de Copas | 4 | 3 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 2 Glórias e remova até 2 Húbris. | — |
+| 7 de Copas | 3 | 3 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 3 Favores. | — |
+| 8 de Copas | 3 | 3 | Elemental | Dionísio, Afrodite, Poseidon | Remova até 3 Húbris e ganhe 1 Favor. | — |
+| 9 de Copas | 3 | 5 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 2 Favores e 1 Glória. | — |
+| 10 de Copas | 4 | 8 | Elemental | Dionísio, Afrodite, Poseidon | Ganhe 2 Glórias e remova até 2 Húbris. | — |
 | Pajem de Copas | 2 | 2 | Elemental | Dionísio, Afrodite, Poseidon | Compre 1 carta e descarte 1. | — |
 | Cavaleiro de Copas | 5 | 3 | Divina: Poseidon | Poseidon | Mova um adversário até 3 casas adiante, sem ativar o destino. | deslocamento |
-| Rainha de Copas | 3 | 4 | Divina: Afrodite | Afrodite, Hera | Ganhe 2 Favores e 2 Glórias. | — |
-| Rei de Copas | 6 | 5 | Divina: Dionísio | Dionísio, Poseidon | Ganhe 4 Glórias e 2 Húbris; remova 1 Húbris. | — |
+| Rainha de Copas | 3 | 9 | Divina: Afrodite | Afrodite, Hera | Ganhe 2 Favores e 2 Glórias. | — |
+| Rei de Copas | 4 | 15 | Divina: Dionísio | Dionísio, Poseidon | Ganhe 4 Glórias e 2 Húbris. | — |
 
 ### Espadas — Ar
 
@@ -379,14 +379,14 @@ Cada carta serve para **mover** (descarta e anda exatamente o movimento) ou para
 | 4 de Espadas | 4 | 2 | Universal | Qualquer casa | Veja a mão de um adversário. | — |
 | 5 de Espadas | 5 | 2 | Universal | Qualquer casa | Troque 1 carta sua por 1 aleatória de um adversário. | interferencia |
 | 6 de Espadas | 6 | 2 | Universal | Qualquer casa | Olhe 3 cartas do Destino e reorganize. | — |
-| 7 de Espadas | 1 | 3 | Elemental | Apolo, Atena, Hermes | Compre 2 cartas e descarte 2. | — |
-| 8 de Espadas | 2 | 3 | Elemental | Apolo, Atena, Hermes | Ganhe 2 Glórias se estiver atrás do líder; caso contrário, 1. | — |
+| 7 de Espadas | 3 | 3 | Elemental | Apolo, Atena, Hermes | Compre 2 cartas e descarte 2. | — |
+| 8 de Espadas | 3 | 6 | Elemental | Apolo, Atena, Hermes | Ganhe 2 Glórias se estiver atrás do líder; caso contrário, 1. | — |
 | 9 de Espadas | 3 | 3 | Elemental | Apolo, Atena, Hermes | Olhe 4 cartas do Destino e reorganize. | — |
-| 10 de Espadas | 4 | 3 | Elemental | Apolo, Atena, Hermes | Ganhe 2 Glórias e 1 Favor. | — |
+| 10 de Espadas | 4 | 8 | Elemental | Apolo, Atena, Hermes | Ganhe 2 Glórias e 1 Favor. | — |
 | Pajem de Espadas | 2 | 2 | Elemental | Apolo, Atena, Hermes | Sua próxima carta de efeito custa −1 Dracma. | — |
 | Cavaleiro de Espadas | 5 | 3 | Divina: Hermes | Hermes, Ares | Teletransporte-se para qualquer casa comum. | — |
-| Rainha de Espadas | 3 | 4 | Divina: Atena | Atena | Ganhe 2 Glórias; compre 2 cartas e descarte 2. | — |
-| Rei de Espadas | 6 | 5 | Divina: Apolo | Apolo, Atena | Ganhe 3 Glórias e veja 3 cartas do Destino. | — |
+| Rainha de Espadas | 3 | 8 | Divina: Atena | Atena | Ganhe 2 Glórias; compre 2 cartas e descarte 2. | — |
+| Rei de Espadas | 4 | 11 | Divina: Apolo | Apolo, Atena | Ganhe 3 Glórias e veja 3 cartas do Destino. | — |
 
 ### Ouros — Terra
 
@@ -398,14 +398,14 @@ Cada carta serve para **mover** (descarta e anda exatamente o movimento) ou para
 | 4 de Ouros | 4 | 2 | Universal | Qualquer casa | Ganhe 4 Dracmas. | — |
 | 5 de Ouros | 5 | 2 | Universal | Qualquer casa | Ganhe 3 Dracmas e remova 1 Húbris. | — |
 | 6 de Ouros | 6 | 2 | Universal | Qualquer casa | Ganhe 5 Dracmas. | — |
-| 7 de Ouros | 1 | 3 | Elemental | Hera, Ártemis, Deméter | Ganhe 6 Dracmas. | — |
-| 8 de Ouros | 2 | 3 | Elemental | Hera, Ártemis, Deméter, Hefesto | Ganhe 4 Dracmas e 1 Favor. | — |
-| 9 de Ouros | 3 | 3 | Elemental | Hera, Ártemis, Deméter | Ganhe 2 Glórias e 3 Dracmas. | — |
+| 7 de Ouros | 3 | 3 | Elemental | Hera, Ártemis, Deméter | Ganhe 6 Dracmas. | — |
+| 8 de Ouros | 3 | 3 | Elemental | Hera, Ártemis, Deméter, Hefesto | Ganhe 4 Dracmas e 1 Favor. | — |
+| 9 de Ouros | 3 | 8 | Elemental | Hera, Ártemis, Deméter | Ganhe 2 Glórias e 3 Dracmas. | — |
 | 10 de Ouros | 4 | 3 | Elemental | Hera, Ártemis, Deméter | Ganhe 7 Dracmas. | — |
 | Pajem de Ouros | 2 | 2 | Elemental | Hera, Ártemis, Deméter | Ganhe 2 Dracmas; compre 1 carta e descarte 1. | — |
-| Cavaleiro de Ouros | 5 | 3 | Divina: Ártemis | Ártemis, Hermes | Ganhe 2 Glórias; teletransporte-se até 2 casas adiante. | — |
-| Rainha de Ouros | 3 | 4 | Divina: Deméter | Deméter, Hera | Ganhe 6 Dracmas e 2 Glórias. | — |
-| Rei de Ouros | 6 | 5 | Divina: Hera | Hera, Hefesto | Ganhe 3 Glórias e 2 Favores; remova 1 Húbris. | — |
+| Cavaleiro de Ouros | 5 | 7 | Divina: Ártemis | Ártemis, Hermes | Ganhe 2 Glórias; teletransporte-se até 2 casas adiante. | — |
+| Rainha de Ouros | 3 | 10 | Divina: Deméter | Deméter, Hera | Ganhe 6 Dracmas e 2 Glórias. | — |
+| Rei de Ouros | 4 | 12 | Divina: Hera | Hera, Hefesto | Ganhe 3 Glórias e 2 Favores; remova 1 Húbris. | — |
 
 ## 14. Afinidades de cartas por templo
 
@@ -457,11 +457,11 @@ Ação principal: descartar uma carta, pagar o custo e escolher a casa (exceto t
 
 | Armadilha | Custo | Efeito na vítima |
 |---|---|---|
-| Rede de Hefesto | 2 Dracmas | Perde 2 Dracmas |
-| Névoa de Hécate | 2 Dracmas | Recebe +1 Húbris |
-| Emboscada de Ares | 3 Dracmas | Perde 1 Favor |
-| Selo de Hermes | 2 Dracmas | Descarta uma carta aleatória e compra outra |
-| Espinhos de Ártemis | 2 Dracmas | Perde 1 Dracma e recebe +1 Húbris |
+| Rede de Hefesto | 3 Dracmas | Perde 4 Dracmas |
+| Névoa de Hécate | 3 Dracmas | Recebe +1 Húbris |
+| Emboscada de Ares | 4 Dracmas | Perde 1 Favor |
+| Selo de Hermes | 3 Dracmas | Descarta uma carta aleatória e compra outra |
+| Espinhos de Ártemis | 3 Dracmas | Perde 2 Dracmas e recebe +1 Húbris |
 
 ## 17. Sabotagens
 
@@ -480,29 +480,29 @@ Sabotagens diretas (desligado, aguardando aprovação do design):
 
 | Tipo | Custo | Efeito |
 |---|---|---|
-| Roubo | 2 Dracmas | Transfere até 2 Dracmas do adversário |
-| Maldição | 3 Dracmas | Adversário recebe +1 Húbris |
-| Bloqueio | 2 Dracmas + 1 Favor | Impede o uso de relíquias por um turno do alvo |
-| Interferência | 2 Dracmas | Adversário descarta uma carta aleatória e compra outra |
-| Sabotagem política | 3 Dracmas | Adversário perde 1 Favor |
+| Roubo | 3 Dracmas | Transfere até 4 Dracmas do adversário |
+| Maldição | 4 Dracmas | Adversário recebe +1 Húbris |
+| Bloqueio | 5 Dracmas + 1 Favor | Impede o uso de relíquias por um turno do alvo |
+| Interferência | 3 Dracmas | Adversário descarta uma carta aleatória e compra outra |
+| Sabotagem política | 4 Dracmas | Adversário perde 1 Favor |
 
 ## 18. Investimentos
 
 | Investimento | Templo | Custo | Renda | Duração | Total |
 |---|---|---|---|---|---|
-| Forja Produtiva | Hefesto | 5 Dracmas | +1 Dracma por rodada | 8 rodadas | 8 Dracmas |
-| Colheita Sagrada | Deméter | 4 Dracmas | +2 Dracmas por rodada | 4 rodadas | 8 Dracmas |
+| Forja Produtiva | Hefesto | 10 Dracmas | +2 Dracmas por rodada | 8 rodadas | 16 Dracmas |
+| Colheita Sagrada | Deméter | 8 Dracmas | +4 Dracmas por rodada | 4 rodadas | 16 Dracmas |
 
 ## 19. Eventos globais
 
 | Evento | Efeito |
 |---|---|
-| Festival de Dionísio | Apostas vencidas rendem +1 Dracma. |
-| Bênção de Deméter | A primeira casa de Dracmas atravessada por turno rende +1 Dracma. |
-| Ira de Ares | Vencedores de duelos recebem +1 Dracma. |
+| Festival de Dionísio | Apostas vencidas rendem +2 Dracmas. |
+| Bênção de Deméter | A primeira casa de Dracmas atravessada por turno rende +2 Dracmas. |
+| Ira de Ares | Vencedores de duelos recebem +2 Dracmas. |
 | Conselho de Atena | A primeira carta de Espadas usada como efeito por rodada custa −1 Dracma (mínimo 1). |
-| Maré de Poseidon | O primeiro Tesouro de cada jogador por rodada rende +1 Dracma. |
-| Julgamento de Zeus | Quem tiver 5 ou mais de Húbris paga 1 Dracma ao fim de cada rodada. |
+| Maré de Poseidon | O primeiro Tesouro de cada jogador por rodada rende +2 Dracmas. |
+| Julgamento de Zeus | Quem tiver 5 ou mais de Húbris paga 2 Dracmas ao fim de cada rodada. |
 
 ## 20. Contratos divinos
 
@@ -517,9 +517,9 @@ Módulo desligado por padrão.
 | Atena | Vencer 2 duelos | 2 | +2 Glória |
 | Ares | Vencer 1 duelo como atacante | 1 | +1 Glória, +2 Dracmas |
 | Hefesto | Concluir um investimento | 1 | +2 Glória |
-| Dionísio | Ganhar 6 Dracmas em apostas | 6 | +2 Glória |
+| Dionísio | Ganhar 10 Dracmas em apostas | 10 | +2 Glória |
 | Hermes | Realizar 3 trocas comerciais | 3 | +2 Glória |
-| Deméter | Receber 6 Dracmas de investimentos | 6 | +2 Glória |
+| Deméter | Receber 12 Dracmas de investimentos | 12 | +2 Glória |
 | Afrodite | Obter 5 Favores | 5 | +2 Glória |
 | Poseidon | Visitar 3 regiões diferentes | 3 | +2 Glória |
 

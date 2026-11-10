@@ -37,29 +37,29 @@ export interface House {
 export const HOUSES: Record<HouseType, House> = {
   comum: { name: 'Comum', pass: '', stop: 'Nenhum efeito.', onPass: [], onStop: [] },
   dracmas: {
-    name: 'Dracmas', pass: `+${RULES.dracmasPass} Dracma`, stop: `+${RULES.dracmasStop} Dracmas`,
+    name: 'Dracmas', pass: `+${RULES.dracmasPass} Dracmas`, stop: `+${RULES.dracmasStop} Dracmas`,
     onPass: [{ k: 'res', res: 'dracmas', n: RULES.dracmasPass }], onStop: [{ k: 'res', res: 'dracmas', n: RULES.dracmasStop }],
   },
   pedagio: {
-    name: 'Pedágio divino', pass: `−${RULES.tollPass} Dracma`, stop: `−${RULES.tollStop} Dracmas. Sem saldo: paga o que tiver e ganha ${RULES.tollHubris} Húbris`,
+    name: 'Pedágio divino', pass: `−${RULES.tollPass} Dracmas`, stop: `−${RULES.tollStop} Dracmas. Sem saldo: paga o que tiver e ganha ${RULES.tollHubris} Húbris`,
     onPass: [{ k: 'toll', n: RULES.tollPass }], onStop: [{ k: 'toll', n: RULES.tollStop }],
   },
   favor: { name: 'Favor', pass: '', stop: `+${RULES.favorStop} Favores`, onPass: [], onStop: [{ k: 'res', res: 'favor', n: RULES.favorStop }] },
   gloria: { name: 'Glória', pass: RULES.gloriaPass ? `+${RULES.gloriaPass} Glória` : '', stop: `+${RULES.gloriaStop} Glória${RULES.gloriaStop > 1 ? 's' : ''}`, onPass: RULES.gloriaPass ? [{ k: 'res', res: 'gloria', n: RULES.gloriaPass }] : [], onStop: [{ k: 'res', res: 'gloria', n: RULES.gloriaStop }] },
   provacao: {
-    name: 'Provação', pass: '', stop: '1d6: 1 +2 Húbris · 2 −2 Dracmas · 3 −1 Favor · 4 +2 Dracmas · 5 +1 Glória · 6 +1 Favor e +1 Dracma',
+    name: 'Provação', pass: '', stop: '1d6: 1 +2 Húbris · 2 −3 Dracmas · 3 −1 Favor · 4 +3 Dracmas · 5 +1 Glória · 6 +1 Favor e +2 Dracmas',
     onPass: [], onStop: [{ k: 'roll', table: 'provacao' }],
   },
   destino: { name: 'Destino', pass: '', stop: 'Revela um Arcano Maior', onPass: [], onStop: [{ k: 'destiny' }] },
   nemesis: {
     name: 'Nêmesis', pass: `Com Húbris ≥ ${RULES.nemesisPassHubris}: −${RULES.nemesisPassToll} Dracma`,
-    stop: 'Julgamento. Húbris 0–1: nada · 2–3: −2 Dracmas · 4–5: paga 4 Dracmas ou Tártaro · 6+: Tártaro',
+    stop: `Julgamento. Húbris 0–1: nada · 2–3: perde ${RULES.judgementLoss} + Húbris em Dracmas · 4–5: paga ${RULES.nemesisFine} + Húbris ou Tártaro · 6+: Tártaro`,
     onPass: [{ k: 'hubrisToll', min: RULES.nemesisPassHubris, n: RULES.nemesisPassToll }], onStop: [{ k: 'judgement' }],
   },
   bifurcacao: { name: 'Bifurcação', pass: 'Escolha de rota: saída normal ou atalho para dentro', stop: 'Nenhum efeito.', onPass: [], onStop: [] },
   templo: { name: 'Templo', pass: '', stop: 'Ação divina (só ao chegar por movimento), comprar a relíquia ou nada', onPass: [], onStop: [{ k: 'temple' }] },
   evento: {
-    name: 'Evento', pass: '', stop: '1d6: 1 −2 Dracmas · 2 +2 Dracmas · 3 +1 Favor · 4 +1 Húbris · 5 −1 Húbris · 6 +1 Glória',
+    name: 'Evento', pass: '', stop: '1d6: 1 −3 Dracmas · 2 +3 Dracmas · 3 +1 Favor · 4 +1 Húbris · 5 −1 Húbris · 6 +1 Glória',
     onPass: [], onStop: [{ k: 'roll', table: 'evento' }],
   },
   altar: {
@@ -70,7 +70,7 @@ export const HOUSES: Record<HouseType, House> = {
     name: 'Tesouro', pass: '', stop: `+${RULES.treasureMin} a ${RULES.treasureMax} Dracmas`,
     onPass: [], onStop: [{ k: 'treasure', min: RULES.treasureMin, max: RULES.treasureMax }],
   },
-  delfos: { name: 'Delfos', pass: '', stop: 'Ver 2 cartas do Destino, ou pagar 2 Dracmas por 1 Favor, ou pagar 3 para comprar 2 e descartar 2', onPass: [], onStop: [{ k: 'delphi' }] },
+  delfos: { name: 'Delfos', pass: '', stop: `Ver 2 cartas do Destino, ou pagar ${RULES.delphiFavor} Dracmas por 1 Favor, ou pagar ${RULES.delphiCycle} para comprar 2 e descartar 2`, onPass: [], onStop: [{ k: 'delphi' }] },
   tartaro: { name: 'Tártaro', pass: '', stop: 'Entrada comum, sem prisão. A prisão exige condenação.', onPass: [], onStop: [] },
 };
 
