@@ -1,4 +1,4 @@
-import { HOUSES, NODES, SHORTCUTS } from '../engine/board';
+import { HOUSES, NODES, RETURNS, SHORTCUTS } from '../engine/board';
 import { GODS } from '../engine/data';
 import type { BoardNode, GameState } from '../engine/types';
 import { houseIcon } from './icons';
@@ -40,6 +40,7 @@ function links(): string {
     out += link(a, b, a.id === 95 ? 'far' : 'trail');
     const s = SHORTCUTS[a.id];
     if (s !== undefined) out += link(a, NODES[s], s > a.id ? 'shortcut' : 'far');
+    if (RETURNS[a.id] !== undefined) out += link(a, NODES[RETURNS[a.id]], 'return');
   }
   return out;
 }
@@ -53,7 +54,7 @@ function nodes(): string {
     const title =
       n.type === 'templo'
         ? `Casa ${pad(n.id)} · Templo de ${god.name} — Parada: ${god.primary.name} ou ${god.secondary.name}; relíquia: ${god.relic.name}.`
-        : `Casa ${pad(n.id)} · ${house.name} (região de ${god.name}) — Passagem: ${house.pass || 'nenhum efeito'}. Parada: ${house.stop}`;
+        : `Casa ${pad(n.id)} · ${house.name} (região de ${god.name}) — Passagem: ${house.pass || 'nenhum efeito'}. Parada: ${house.stop}${RETURNS[n.id] !== undefined ? ` Retorno: daqui também se pode sair para a casa ${pad(RETURNS[n.id])}, na volta externa.` : ''}`;
     const badge = BADGE[n.type] ? `<g class="badge" transform="translate(12,-12)"><circle r="7"/><text y="3">${BADGE[n.type]}</text></g>` : '';
     const body =
       n.type === 'templo'
@@ -68,7 +69,7 @@ export function boardSvg(): string {
   const marker = (id: string): string =>
     `<marker id="arrow-${id}" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0,0L10,5L0,10Z"/></marker>`;
   return `<svg id="board" viewBox="-500 -432 1000 864" role="img" aria-label="Mapa do Olimpo">
-    <defs>${marker('trail')}${marker('shortcut')}${marker('far')}</defs>
+    <defs>${marker('trail')}${marker('shortcut')}${marker('far')}${marker('return')}</defs>
     <ellipse class="plate-edge" rx="498" ry="430"/>
     <ellipse class="plate" rx="486" ry="418"/>
     <ellipse class="plate-line" rx="478" ry="410"/>

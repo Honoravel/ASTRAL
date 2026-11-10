@@ -66,6 +66,19 @@ ativada e teletransportes não ativam nada. O resultado fica em `state.lastMove`
 
 Pedágio (ou fiscalização de Nêmesis) sem saldo: paga o que tiver e ganha 1 Húbris, uma vez por casa.
 
+## Mapa sem fim: atalhos e retornos
+
+A espiral tem 26 casas por volta. Além das seis bifurcações da v1.5 (atalhos para a volta de
+dentro), seis **retornos** levam à volta de fora, no mesmo ângulo:
+
+| Origem | 28 | 39 | 60 | 71 | 84 | 92 |
+|---|---|---|---|---|---|---|
+| Retorno | 02 | 13 | 34 | 45 | 58 | 66 |
+
+Cada retorno fecha um anel de 27 passos, então o jogador pode dar voltas e revisitar templos e
+casas sem ir até o centro. As casas de origem mantêm o tipo e os efeitos e só ganham uma segunda
+saída (ficam em `RETURNS`, em `board.ts`). Isso altera a topologia da v1.5/v1.6 a pedido do autor.
+
 ## Templos (v1.8)
 
 Ao **chegar** a um templo por movimento, o jogador escolhe uma opção: ação principal, ação
@@ -134,12 +147,12 @@ Presumidas na implementação, a confirmar:
 - Foice rende no início de cada rodada a partir da segunda; Cinto rende ao fim das rodadas 3, 6, 9…
 - "Teletransportar até N casas adiante" permite ficar onde está.
 
-## Telemetria (IA × IA, 150 partidas, meta de 20 Glórias, regras v1.8)
+## Telemetria (IA × IA, 150 partidas, meta de 20 Glórias, com retornos)
 
 | Jogadores | Rodadas (média) | p10–p90 | Duelos/partida | Prisões/jogador | Relíquias/jogador |
 |---|---|---|---|---|---|
-| 2 | 22,3 | 18–28 | 0,3 | 0,03 | 0,8 |
-| 4 | 21,0 | 17–25 | 1,3 | 0,03 | 0,8 |
+| 2 | 21,3 | 16–27 | 0,3 | 0,04 | 0,7 |
+| 4 | 19,7 | 16–24 | 1,3 | 0,03 | 0,6 |
 
 Qualquer valor de `config.ts` pode ser sobrescrito na simulação com `chave=valor`:
 

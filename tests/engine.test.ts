@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aiStep, autoAnswer } from '../src/engine/ai';
-import { buildBoard, DIST, NODES, reach, SHORTCUTS, TARTARUS, templeOf } from '../src/engine/board';
+import { buildBoard, DIST, NODES, reach, RETURNS, SHORTCUTS, TARTARUS, templeOf } from '../src/engine/board';
 import { CARDS } from '../src/engine/cards';
 import { G, GODS, SIGNS } from '../src/engine/data';
 import { DESTINIES } from '../src/engine/destiny';
@@ -46,7 +46,33 @@ describe('tabuleiro', () => {
     for (const [from, to] of Object.entries(SHORTCUTS)) {
       expect([...reach(Number(from), 1).keys()].sort((a, b) => a - b)).toEqual([Number(from) + 1, to].sort((a, b) => a - b));
     }
-    expect(NODES.filter((n) => n.next.length === 2)).toHaveLength(6);
+    expect(NODES.filter((n) => n.type === 'bifurcacao' && n.next.length === 2)).toHaveLength(6);
+    expect(NODES.filter((n) => n.next.length === 2)).toHaveLength(12);
+    expect(NODES.every((n) => n.next.length <= 2)).toBe(true);
+  });
+
+  it('os retornos fecham anéis de 27 passos, permitindo dar voltas sem fim', () => {
+    for (const [from, to] of Object.entries(RETURNS)) {
+      const origin = Number(from);
+      expect(NODES[origin].next).toEqual([origin + 1, to]);
+      expect(NODES[origin].type).not.toBe('bifurcacao');
+      expect(DIST[to][origin]).toBe(26); // da volta externa de volta à origem
+      expect(DIST[origin][to]).toBe(1);
+    }
+    // Uma rota real pode usar o retorno: 4 passos de 58 passam por 59 e 60 e saem para 34 e 35.
+    expect(reach(58, 4).get(35)).toEqual([59, 60, 34, 35]);
+    // Cada destino continua tendo um único caminho, então escolher o destino escolhe a rota.
+    for (const n of NODES) {
+      for (let steps = 1; steps <= 7; steps++) {
+        const paths: number[][] = [];
+        const walkAll = (node: number, left: number, path: number[]): void => {
+          if (left === 0) return void paths.push(path);
+          for (const next of NODES[node].next) walkAll(next, left - 1, [...path, next]);
+        };
+        walkAll(n.id, steps, []);
+        expect(new Set(paths.map((p) => p[p.length - 1])).size).toBe(paths.length);
+      }
+    }
   });
 
   it('move exatamente os passos, escolhendo a rota na bifurcação', () => {

@@ -150,6 +150,9 @@ small { color: var(--muted); }
 #arrow-trail path { fill: var(--black); }
 #arrow-shortcut path { fill: var(--gold); }
 #arrow-far path { fill: var(--cream); }
+.return { stroke: #7fd0dc; stroke-width: 3.5; }
+#arrow-return path { fill: #7fd0dc; }
+.key-line { display: inline-block; width: 1.6rem; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 0.3rem; }
 .summit-disc { fill: var(--black); }
 .summit-ring { fill: none; stroke: var(--gold); stroke-width: 1.5; }
 .pediment { fill: none; stroke: var(--gold); stroke-width: 2; stroke-linejoin: round; }

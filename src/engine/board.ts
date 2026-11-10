@@ -56,7 +56,7 @@ export const HOUSES: Record<HouseType, House> = {
     stop: 'Julgamento. Húbris 0–1: nada · 2–3: −2 Dracmas · 4–5: paga 4 Dracmas ou Tártaro · 6+: Tártaro',
     onPass: [{ k: 'hubrisToll', min: RULES.nemesisPassHubris, n: RULES.nemesisPassToll }], onStop: [{ k: 'judgement' }],
   },
-  bifurcacao: { name: 'Bifurcação', pass: 'Escolha de rota: saída normal ou atalho', stop: 'Nenhum efeito.', onPass: [], onStop: [] },
+  bifurcacao: { name: 'Bifurcação', pass: 'Escolha de rota: saída normal ou atalho para dentro', stop: 'Nenhum efeito.', onPass: [], onStop: [] },
   templo: { name: 'Templo', pass: '', stop: 'Ação divina (só ao chegar por movimento), comprar a relíquia ou nada', onPass: [], onStop: [{ k: 'temple' }] },
   evento: {
     name: 'Evento', pass: '', stop: '1d6: 1 −2 Dracmas · 2 +2 Dracmas · 3 +1 Favor · 4 +1 Húbris · 5 −1 Húbris · 6 +1 Glória',
@@ -77,6 +77,13 @@ export const HOUSES: Record<HouseType, House> = {
 /** Bifurcações: origem → atalho (a saída normal é sempre a casa seguinte). */
 export const SHORTCUTS: Record<number, number> = { 6: 32, 22: 48, 38: 64, 54: 80, 70: 0, 86: 16 };
 
+/**
+ * Retornos: origem → casa da volta externa, no mesmo ângulo da espiral. Cada um fecha um anel de
+ * 27 passos, de modo que o jogador pode dar voltas no mapa em vez de ser levado sempre ao centro.
+ * As casas de origem mantêm o tipo e os efeitos; só ganham uma segunda saída.
+ */
+export const RETURNS: Record<number, number> = { 28: 2, 39: 13, 60: 34, 71: 45, 84: 58, 92: 66 };
+
 /** Monta o mapa e rejeita duplicações ou lacunas na tabela de tipos. */
 export function buildBoard(typeIds: Partial<Record<HouseType, number[]>> = TYPE_IDS): BoardNode[] {
   const types = new Array<HouseType | undefined>(NODE_COUNT).fill(undefined);
@@ -94,6 +101,7 @@ export function buildBoard(typeIds: Partial<Record<HouseType, number[]>> = TYPE_
     const radius = 452 - id * (258 / 95);
     const next = [(id + 1) % NODE_COUNT];
     if (id in SHORTCUTS) next.push(SHORTCUTS[id]);
+    if (id in RETURNS) next.push(RETURNS[id]);
     return {
       id,
       region: Math.floor(id / 8),
