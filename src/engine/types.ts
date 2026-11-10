@@ -64,7 +64,7 @@ export type Op =
   | { t: 'res'; p: number; res: Res; n: number; raw?: boolean }
   | { t: 'refill'; p: number }
   | { t: 'transfer'; from: number; to: number; res: Res; n: number }
-  | { t: 'target'; p: number; prompt: string; good?: boolean; filter?: 'free' | 'rich3'; ops: Op[] }
+  | { t: 'target'; p: number; prompt: string; good?: boolean; filter?: 'free' | 'rich3'; sab?: string; ops: Op[] }
   | { t: 'choice'; p: number; prompt: string; options: ChoiceOption[] }
   | { t: 'draw'; p: number; n: number }
   | { t: 'discard'; p: number; n: number }
@@ -99,6 +99,10 @@ export type Op =
   | { t: 'duelBonus'; p: number }
   | { t: 'divineDiscount'; p: number }
   | { t: 'playCard'; p: number; card: number }
+  | { t: 'decree'; p: number }
+  | { t: 'track'; p: number; kind: string }
+  | { t: 'acceptContract'; p: number; god: number }
+  | { t: 'sabotage'; p: number; of: number; kind: string }
   | { t: 'buy'; p: number; relic: number }
   | { t: 'altar'; p: number; bet: number }
   | { t: 'log'; p: number | null; text: string }
@@ -142,8 +146,16 @@ export interface Player {
   shield: boolean;
   discountNext: boolean;
   duelDone: boolean;
-  /** Dracmas que a Forja ainda vai render e rodadas restantes da Colheita. */
-  invest: { forge: number; harvest: number };
+  investments: Investment[];
+  /** Decreto de Zeus: bloqueia a próxima sabotagem política até a eleição. */
+  decree: boolean;
+  /** Já sabotou neste turno. */
+  sabDone: boolean;
+  /** Relíquias bloqueadas até o fim do próprio turno. */
+  blocked: boolean;
+  contract: ContractState | null;
+  /** Deuses cujos contratos este jogador já concluiu. */
+  contractsDone: number[];
   /** Força extra no próximo duelo (Preparação de Guerra). */
   duelBonus: number;
   /** Próxima carta divina custa −1 (Aprimoramento). */
@@ -152,6 +164,34 @@ export interface Player {
   gloryRound: number | null;
   /** Usos por rodada (ação de templo, relíquias, visão do Oráculo). */
   used: Record<string, number>;
+}
+
+export interface Investment {
+  kind: 'forge' | 'harvest';
+  incomePerRound: number;
+  remainingRounds: number;
+  received: number;
+}
+
+export interface ContractState {
+  god: number;
+  progress: number;
+  regions: number[];
+}
+
+export interface TrapState {
+  id: number;
+  owner: number;
+  node: number;
+  /** Índice em TRAPS. */
+  kind: number;
+  expiresAtRound: number;
+}
+
+export interface GlobalEventState {
+  id: number;
+  startedAtRound: number;
+  expiresAtRound: number;
 }
 
 export type Phase = 'CHOOSE_ACTION' | 'RESOLVE_EFFECTS' | 'GAME_OVER';
@@ -185,6 +225,13 @@ export interface GameState {
   /** Estatísticas para telemetria de balanceamento. */
   stats: { duels: number; jails: number[] };
   lastMove: MovementResult | null;
+  /** Armadilhas ativas. Só o dono deve vê-las. */
+  traps: TrapState[];
+  trapSeq: number;
+  /** Última armadilha ativada (para a interface mostrar). */
+  lastTrap: { seq: number; node: number; kind: number; owner: number; victim: number } | null;
+  globalEvent: GlobalEventState | null;
+  elections: { round: number; winner: number | null; votes: number[] }[];
   /** Em simulações da IA, a partida para antes de passar a vez. */
   sim?: boolean;
 }
@@ -203,5 +250,8 @@ export type Command =
   | { type: 'PLAY_CARD_EFFECT'; card: number }
   | { type: 'BUY_RELIC' }
   | { type: 'FREE_POWER'; power: FreePower }
+  | { type: 'PLACE_TRAP'; card: number; kind: number; node: number }
+  | { type: 'SABOTAGE'; kind: string; target: number }
+  | { type: 'ABANDON_CONTRACT' }
   | { type: 'END_TURN' }
   | { type: 'ANSWER'; value: Answer };

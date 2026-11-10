@@ -3,9 +3,10 @@ import { HOUSES, NODES } from '../engine/board';
 import { cardName, CARDS, useLabel } from '../engine/cards';
 import { AFFINITY, ELEMENT_NAME, glyph, GODS, SIGNS } from '../engine/data';
 import { DESTINIES } from '../engine/destiny';
-import { apply, canBuyRelic, canEffect, canUseSandals, costFor, deserialize, freePowers, moveOptions, newGame, RULES, serialize, votes } from '../engine/game';
+import { CONTRACTS, EVENTS, TRAPS } from '../engine/config';
+import { apply, canBuyRelic, canUseSandals, costFor, effectBlock, TRAP_NODES, trapBlock, deserialize, freePowers, moveOptions, newGame, RULES, serialize, votes } from '../engine/game';
 import type { Answer, Command, FreePower, GameState, HouseType, Pending, Player, PlayerConfig } from '../engine/types';
-import { boardSvg, PLAYER_COLORS, showHighlights, updateTokens } from './board-view';
+import { boardSvg, flashTrap, PLAYER_COLORS, showHighlights, showTraps, updateTokens } from './board-view';
 import { iconSvg } from './icons';
 import './style.css';
 
@@ -20,6 +21,8 @@ let order: number[] = []; // ordem atual numa reorganização
 let orderFor: Pending | null = null;
 let seenBy = -1; // último humano que confirmou estar com o dispositivo
 let timer: number | undefined;
+let trapKind: number | null = null; // armadilha escolhida, aguardando a casa
+let shownTrap = 0; // última ativação de armadilha já exibida
 
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const pad = (id: number): string => String(id).padStart(2, '0');
@@ -109,6 +112,8 @@ function rulesHtml(): string {
       <li>Efeitos <b>universais</b> valem em qualquer casa; <b>elementais</b>, só em templo do elemento da carta; <b>divinos</b>, só no templo do deus indicado. Cartas com <b>afinidade</b> também valem no templo afim.</li>
       <li>O <b>caminho importa</b>: cada casa atravessada aplica seu efeito de <b>passagem</b> (ganhar ou pagar Dracmas, fiscalização de Nêmesis) e a última aplica só o efeito de <b>parada</b>. Ao <b>chegar</b> a um templo por movimento, escolha <b>uma</b> opção: ação principal, ação secundária, relíquia, efeito de uma carta permitida ali, ou nada. Ficar parado no templo não repete as ações.</li>
       <li>O mapa é uma espiral que sobe ao Olimpo e <b>não tem fim</b>: <span class="key-line" style="border-color:#e3b341"></span>atalhos dourados cortam caminho para a volta de dentro e <span class="key-line" style="border-color:#7fd0dc"></span>retornos azuis levam à volta de fora, fechando anéis de 27 casas. Onde há duas saídas, você escolhe a rota.</li>
+      <li><b>Armadilhas</b>: descartando uma carta e pagando o custo, você arma uma armadilha oculta em qualquer casa que não seja templo, Delfos, Tártaro ou Nêmesis. Ela dispara no primeiro adversário que passar ou parar ali, dura 3 rodadas, e cada jogador mantém no máximo 2.</li>
+      <li>Após cada eleição é revelado um <b>evento global</b>, que vale pelas 6 rodadas seguintes e aparece acima do mapa.</li>
       <li>Ao parar em casa ocupada, você pode desafiar para um <b>duelo</b>: cada um aposta de 0 a 3 Favores em segredo.</li>
       <li>A cada ${RULES.electionEvery} rodadas há <b>eleição do Oráculo</b>: vence quem tiver mais Favor (o Favor não é gasto) e ganha 1 Glória.</li>
       <li><b>Húbris</b> é punida nas casas de Nêmesis, e quem encerra o turno com <b>${RULES.wrathHubris} ou mais</b> é condenado ao <b>Tártaro</b>, de onde se sai por Penitência, Suborno ou Pacto Sombrio.</li>
@@ -130,14 +135,16 @@ function rulesHtml(): string {
 function startGame(): void {
   selected = null;
   seenBy = -1;
+  shownTrap = game.lastTrap?.seq ?? 0;
   app.innerHTML = `
     <div class="game">
       <aside class="panel left">
         <header><h1>Ascensão ao Olimpo</h1></header>
         <div id="players"></div>
+        <div id="delphi"></div>
         <div class="left-buttons"><button id="help">Regras e casas</button><button id="quit" class="ghost">Sair</button></div>
       </aside>
-      <main class="board-wrap">${boardSvg()}</main>
+      <main class="board-wrap"><div id="event"></div>${boardSvg()}</main>
       <aside class="panel right">
         <div id="side"></div>
         <div id="destiny"></div>
@@ -163,6 +170,7 @@ function send(cmd: Command): void {
     console.warn(e);
   }
   selected = null;
+  trapKind = null;
   sandals = 0;
   picks = [];
   update();
@@ -182,8 +190,8 @@ function playersHtml(): string {
       p.jailed ? '<span class="tag red">Tártaro</span>' : '',
       p.shield ? '<span class="tag">Escudo</span>' : '',
       p.duelBonus ? `<span class="tag">Duelo +${p.duelBonus}</span>` : '',
-      p.invest.forge ? `<span class="tag" title="Dracmas que a Forja ainda vai render">Forja ${p.invest.forge}</span>` : '',
-      p.invest.harvest ? `<span class="tag" title="Rodadas restantes da Colheita">Colheita ${p.invest.harvest}</span>` : '',
+      p.decree ? '<span class="tag" title="Anula a próxima sabotagem política">Decreto</span>' : '',
+      p.blocked ? '<span class="tag red">Relíquias bloqueadas</span>' : '',
     ].join('');
     const relics = p.relics.map((r) => `<span class="relic" title="${GODS[r].relic.text}">${GODS[r].relic.name}</span>`).join('');
     return `
@@ -198,6 +206,8 @@ function playersHtml(): string {
           <div><dt>Cartas</dt><dd>${p.hand.length}</dd></div>
         </dl>
         ${relics ? `<div class="relics">${relics}</div>` : ''}
+        ${p.investments.map((i) => `<div class="invest"><b>${i.kind === 'forge' ? 'Forja Produtiva' : 'Colheita Sagrada'}</b> +${i.incomePerRound}/rodada · ${i.remainingRounds} rodada${i.remainingRounds > 1 ? 's' : ''} · recebido ${i.received}</div>`).join('')}
+        ${p.contract ? `<div class="invest"><b>Contrato de ${GODS[p.contract.god].name}</b> ${CONTRACTS[p.contract.god].text}: ${Math.min(p.contract.progress, CONTRACTS[p.contract.god].goal)}/${CONTRACTS[p.contract.god].goal}</div>` : ''}
       </div>`;
   }).join('');
 }
@@ -209,7 +219,7 @@ function affinityOf(id: number): string {
 
 function cardHtml(id: number, viewer: Player, extra = '', cls = ''): string {
   const c = CARDS[id];
-  const cost = costFor(viewer, c);
+  const cost = costFor(viewer, c, game);
   return `
     <div class="card ${cls}" data-card="${id}">
       <div class="card-top"><span class="mv" title="Movimento">${c.move}</span><span class="rank">${cardName(c)}</span><span class="cost ${cost < c.cost ? 'discount' : ''}" title="Custo do efeito em Dracmas">${cost}</span></div>
@@ -271,6 +281,27 @@ function decisionHtml(pending: Pending, me: Player): string {
   return `<div class="decision"><h2>Decisão de ${esc(me.name)}</h2><p class="prompt">${esc(pending.prompt)}</p>${body}</div>`;
 }
 
+function selectedHtml(p: Player, id: number): string {
+  const c = CARDS[id];
+  const steps = Math.max(1, c.move + sandals);
+  const routes = [...moveOptions(game, id, sandals)].map(([dest, path]) => {
+    const passes = path.slice(0, -1).filter((n) => NODES[n].onPass.length > 0).map((n) => `${HOUSES[NODES[n].type].pass} <small>(${pad(n)})</small>`);
+    const stop = NODES[dest].type === 'templo' ? `Templo de ${GODS[NODES[dest].region].name}` : HOUSES[NODES[dest].type].name;
+    return `<button data-route="${dest}"><b>Casa ${pad(dest)} · ${stop}</b><small>Caminho: ${passes.length ? passes.join(' · ') : 'sem efeitos'}</small></button>`;
+  }).join('');
+  const block = effectBlock(game, id);
+  const cost = costFor(p, c, game);
+  const effect = `<button data-effect="${id}" class="primary" ${block ? 'disabled' : ''}><b>Usar efeito especial</b> (${cost} Dracma${cost === 1 ? '' : 's'})<small>${c.text}</small>${block ? `<small class="why">Indisponível: ${block}</small>` : ''}</button>`;
+  let traps = '';
+  if (trapBlock(game, 0) !== 'Armadilhas desativadas.') {
+    traps = `<h3>Armar armadilha <small>(descarta esta carta)</small></h3><div class="trap-list">${TRAPS.map((t, k) => {
+      const why = trapBlock(game, k);
+      return `<button data-trap="${k}" class="${trapKind === k ? 'on' : ''}" ${why ? `disabled title="${why}"` : ''}><b>${t.name}</b> (${t.cost})<small>${t.text}</small></button>`;
+    }).join('')}</div>${trapKind !== null ? '<p class="hint">Clique no mapa na casa onde armar. Só você verá o marcador.</p>' : ''}`;
+  }
+  return `<div class="selected-panel"><h3>${cardName(c)}</h3><h3>Mover ${steps} casa${steps > 1 ? 's' : ''}</h3><div class="routes">${routes}</div><h3>Efeito</h3>${effect}${traps}</div>`;
+}
+
 function actionHtml(p: Player): string {
   const node = NODES[p.pos];
   const here = node.type === 'templo' ? `Templo de ${GODS[node.region].name}` : `${HOUSES[node.type].name}, região de ${GODS[node.region].name}`;
@@ -280,21 +311,28 @@ function actionHtml(p: Player): string {
     if (game.stock[node.region]) buttons.push(`<button data-cmd="BUY_RELIC" ${canBuyRelic(game) ? '' : 'disabled'} title="${god.relic.text}">Comprar ${god.relic.name} (${god.relic.price})</button>`);
   }
   for (const power of freePowers(game)) buttons.push(`<button data-power="${power}" class="free">${POWER_LABEL[power]}</button>`);
+  if (p.contract) buttons.push('<button data-cmd="ABANDON_CONTRACT" class="ghost">Abandonar contrato (2 Dracmas)</button>');
   buttons.push('<button data-cmd="END_TURN" class="ghost">Encerrar turno sem agir</button>');
   const sandalsUi = canUseSandals(game)
     ? `<div class="sandals">Sandálias de Hermes: ${([-1, 0, 1] as const).map((m) => `<button data-sandals="${m}" class="${sandals === m ? 'on' : ''}">${m > 0 ? '+1' : m < 0 ? '−1' : '0'}</button>`).join('')}</div>`
     : '';
-  const hint = selected === null ? 'Clique em uma carta para mover, ou use um efeito.' : 'Escolha a rota abaixo ou clique no destino destacado no mapa.';
-  const routes = selected === null ? '' : `<div class="routes">${[...moveOptions(game, selected, sandals)].map(([dest, path]) => {
-    const passes = path.slice(0, -1).filter((n) => NODES[n].onPass.length > 0).map((n) => `${HOUSES[NODES[n].type].pass} <small>(${pad(n)})</small>`);
-    const stop = NODES[dest].type === 'templo' ? `Templo de ${GODS[NODES[dest].region].name}` : HOUSES[NODES[dest].type].name;
-    return `<button data-route="${dest}"><b>Casa ${pad(dest)} · ${stop}</b><small>Caminho: ${passes.length ? passes.join(' · ') : 'sem efeitos'}</small></button>`;
-  }).join('')}</div>`;
+  const hint = selected === null ? 'Clique em uma carta: cada uma serve para mover ou para o efeito especial.' : '';
   const cards = p.hand.map((id) => {
-    const can = canEffect(game, id);
-    return cardHtml(id, p, `<button data-effect="${id}" ${can ? 'class="primary"' : 'disabled'}>Usar efeito</button>`, `movable ${id === selected ? 'selected' : ''}`);
+    const block = effectBlock(game, id);
+    return cardHtml(id, p, `<div class="card-state ${block ? '' : 'ok'}">${block ? block : 'Efeito disponível'}</div>`, `movable ${id === selected ? 'selected' : ''}`);
   }).join('');
-  return `<h2>Turno de ${esc(p.name)}</h2><p class="where">Casa ${pad(p.pos)} · ${here}</p><p class="hint">${hint}</p>${sandalsUi}${routes}<div class="buttons">${buttons.join('')}</div><div class="cards">${cards}</div>`;
+  return `<h2>Turno de ${esc(p.name)}</h2><p class="where">Casa ${pad(p.pos)} · ${here}</p>${hint ? `<p class="hint">${hint}</p>` : ''}${sandalsUi}${selected === null ? '' : selectedHtml(p, selected)}<div class="buttons">${buttons.join('')}</div><div class="cards">${cards}</div>`;
+}
+
+function delphiHtml(): string {
+  const o = game.oracle;
+  const left = RULES.electionEvery - ((game.round - 1) % RULES.electionEvery);
+  const holder = o.holder === null ? null : game.players[o.holder];
+  const powers = holder
+    ? `Visão Profética: ${holder.used.vision ? 'usada nesta rodada' : 'disponível'} · Tecelagem: ${o.weaveUsed ? 'usada' : 'disponível'} · Proteção do Destino: ${o.protectUsed ? 'usada' : 'disponível'}`
+    : 'Sem Oráculo, ninguém tem os poderes.';
+  const history = game.elections.slice(-3).map((e) => `<li>Rodada ${e.round}: ${e.winner === null ? 'cargo vago' : esc(game.players[e.winner].name)} <small>(${e.votes.join(' × ')})</small></li>`).join('');
+  return `<h2>Delfos</h2><div class="delphi"><div><b>${left === 1 ? 'Eleição ao fim desta rodada' : `Eleição em ${left} rodadas`}</b></div><div>Votos: ${game.players.map((p) => `${esc(p.name)} ${votes(p)}`).join(' · ')}</div><div>Oráculo: <b>${holder ? esc(holder.name) : 'vago'}</b></div><small>${powers}</small>${history ? `<ul>${history}</ul>` : ''}</div>`;
 }
 
 function sideHtml(): string {
@@ -322,6 +360,9 @@ function update(): void {
 
   app.querySelector('#players')!.innerHTML = playersHtml();
   app.querySelector('#side')!.innerHTML = sideHtml();
+  app.querySelector('#delphi')!.innerHTML = delphiHtml();
+  const ge = game.globalEvent;
+  app.querySelector('#event')!.innerHTML = ge ? `<b>Evento global · ${EVENTS[ge.id].name}</b> ${EVENTS[ge.id].text} <small>Até o fim da rodada ${ge.expiresAtRound}.</small>` : '<small>Nenhum evento global ativo. O primeiro é revelado após a primeira eleição.</small>';
   app.querySelector('#destiny')!.innerHTML = game.lastDestiny === null ? '' : `<h2>Último Destino</h2>${destinyHtml(game.lastDestiny)}`;
   const log = app.querySelector('#log')!;
   log.innerHTML = game.log.slice(-50).map((e) => `<li>${e.player === null ? '' : `<span class="swatch" style="background:${PLAYER_COLORS[e.player]}"></span>`}${esc(e.text)}</li>`).join('');
@@ -341,6 +382,11 @@ function update(): void {
   if (mine && pending?.kind === 'dest') {
     dests = pending.nodes!;
     onPick = (d) => answer(d);
+  } else if (mine && !pending && selected !== null && trapKind !== null) {
+    const card = selected;
+    const kind = trapKind;
+    dests = TRAP_NODES;
+    onPick = (d) => send({ type: 'PLACE_TRAP', card, kind, node: d });
   } else if (mine && !pending && selected !== null) {
     const card = selected;
     const mod = sandals;
@@ -348,6 +394,11 @@ function update(): void {
     onPick = (d) => send({ type: 'PLAY_CARD_MOVE', card, dest: d, mod });
   }
   showHighlights(svg, dests, onPick);
+  showTraps(svg, mine ? game.traps.filter((t) => t.owner === actor.id).map((t) => ({ node: t.node, name: TRAPS[t.kind].name })) : []);
+  if (game.lastTrap && game.lastTrap.seq !== shownTrap) {
+    shownTrap = game.lastTrap.seq;
+    flashTrap(svg, game.lastTrap.node);
+  }
 
   const side = app.querySelector<HTMLDivElement>('#side')!;
   side.querySelector('#ready')?.addEventListener('click', () => {
@@ -357,6 +408,7 @@ function update(): void {
   side.querySelectorAll<HTMLElement>('.card.movable').forEach((el) => el.addEventListener('click', () => {
     const id = Number(el.dataset.card);
     selected = selected === id ? null : id;
+    trapKind = null;
     update();
   }));
   side.querySelectorAll<HTMLButtonElement>('[data-route]').forEach((el) => el.addEventListener('click', () => onPick(Number(el.dataset.route))));
@@ -364,8 +416,13 @@ function update(): void {
     ev.stopPropagation();
     send({ type: 'PLAY_CARD_EFFECT', card: Number(el.dataset.effect) });
   }));
-  side.querySelectorAll<HTMLButtonElement>('[data-cmd]').forEach((el) => el.addEventListener('click', () => send({ type: el.dataset.cmd as 'BUY_RELIC' | 'END_TURN' })));
+  side.querySelectorAll<HTMLButtonElement>('[data-cmd]').forEach((el) => el.addEventListener('click', () => send({ type: el.dataset.cmd as 'BUY_RELIC' | 'END_TURN' | 'ABANDON_CONTRACT' })));
   side.querySelectorAll<HTMLButtonElement>('[data-power]').forEach((el) => el.addEventListener('click', () => send({ type: 'FREE_POWER', power: el.dataset.power as FreePower })));
+  side.querySelectorAll<HTMLButtonElement>('[data-trap]').forEach((el) => el.addEventListener('click', () => {
+    const k = Number(el.dataset.trap);
+    trapKind = trapKind === k ? null : k;
+    update();
+  }));
   side.querySelectorAll<HTMLButtonElement>('[data-sandals]').forEach((el) => el.addEventListener('click', () => {
     sandals = Number(el.dataset.sandals) as -1 | 0 | 1;
     update();

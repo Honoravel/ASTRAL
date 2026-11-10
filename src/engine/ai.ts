@@ -1,8 +1,8 @@
 import { DIST, NODES, templeOf } from './board';
 import { CARDS } from './cards';
 import { GODS } from './data';
-import { apply, canBuyRelic, canEffect, costFor, currentPlayer, freePowers, moveOptions, others, placeAllows, subst } from './game';
-import { RULES } from './config';
+import { RULES, TRAPS } from './config';
+import { apply, canBuyRelic, canEffect, costFor, currentPlayer, freePowers, moveOptions, others, placeAllows, subst, TRAP_NODES, trapBlock } from './game';
 import { rand, shuffle } from './rng';
 import type { Answer, Command, GameState, Op, Player, Res } from './types';
 
@@ -14,7 +14,11 @@ function hubrisRisk(h: number): number {
 
 /** Avaliação da situação de um jogador. */
 function worth(state: GameState, p: Player): number {
-  return p.gloria * 10 + Math.min(p.dracmas, 8) + Math.min(Math.max(0, p.dracmas - 8), 6) * 0.4 + p.favor * 1.5 - hubrisRisk(p.hubris)
+  // O Favor vale mais quando a eleição se aproxima.
+  const toElection = RULES.electionEvery - ((state.round - 1) % RULES.electionEvery);
+  const favorWeight = toElection <= 2 ? 2.4 : 1.5;
+  const income = p.investments.reduce((a, i) => a + i.incomePerRound * i.remainingRounds, 0) * 0.7;
+  return p.gloria * 10 + Math.min(p.dracmas, 8) + Math.min(Math.max(0, p.dracmas - 8), 6) * 0.4 + p.favor * favorWeight - hubrisRisk(p.hubris) + income + (p.decree ? 1 : 0)
     + p.relics.length * 7 + p.hand.length * 0.8 - (p.jailed ? 9 : 0) + (state.oracle.holder === p.id ? 2 : 0);
 }
 
@@ -51,7 +55,9 @@ function opsValue(state: GameState, me: number, ops: Op[]): number {
       case 'swapUpTo': v += 0.8; break;
       case 'duelBonus': v += state.players[me].duelBonus ? 0 : 1; break;
       case 'divineDiscount': v += 0.8; break;
-      case 'playCard': v += CARDS[op.card].cost * 2.6 + 2 - costFor(state.players[me], CARDS[op.card]); break;
+      case 'decree': v += 1; break;
+      case 'acceptContract': v += 4; break;
+      case 'playCard': v += CARDS[op.card].cost * 2.6 + 2 - costFor(state.players[me], CARDS[op.card], state); break;
       default: break;
     }
   }
@@ -114,6 +120,8 @@ function simulate(state: GameState, cmd: Command): number {
   const me = state.current;
   const copy: GameState = JSON.parse(JSON.stringify(state));
   copy.sim = true;
+  // Informação oculta: a IA não conhece as armadilhas dos outros nem a ordem dos baralhos.
+  copy.traps = copy.traps.filter((t) => t.owner === me);
   copy.seed = (copy.seed ^ 0x9e3779b9) | 0;
   shuffle(copy, copy.deck);
   shuffle(copy, copy.destiny);
@@ -144,6 +152,30 @@ function approach(state: GameState, p: Player, dest: number, spent: number): num
   return best + (NODES[dest].type === 'templo' ? 1 : 0);
 }
 
+/**
+ * Armadilha: procura uma casa de 2 a 5 passos à frente de um rival que esteja na disputa,
+ * preferindo bifurcações e casas logo antes de templos. Usa só informação pública.
+ */
+function planTrap(state: GameState, p: Player): { cmd: Command; bias: number } | null {
+  if (p.hand.length === 0 || p.dracmas < 6) return null;
+  const rivals = others(state, p.id).map((id) => state.players[id]).filter((r) => !r.jailed && r.gloria >= p.gloria - 2);
+  if (rivals.length === 0) return null;
+  const rival = rivals.reduce((a, b) => (b.gloria > a.gloria ? b : a));
+  const kind = rival.dracmas >= 2 ? 0 : 1;
+  if (trapBlock(state, kind)) return null;
+  let best = -1;
+  let bestScore = 0;
+  for (const node of TRAP_NODES) {
+    const d = DIST[rival.pos][node];
+    if (d < 2 || d > 5 || state.traps.some((t) => t.node === node && t.owner === p.id)) continue;
+    const score = (NODES[node].next.length > 1 ? 1.5 : 0) + (NODES[NODES[node].next[0]].type === 'templo' ? 1.5 : 0) + (NODES[rival.pos].next.length === 1 ? 1 : 0) + 1 / d;
+    if (score > bestScore) [best, bestScore] = [node, score];
+  }
+  if (best < 0) return null;
+  const card = [...p.hand].sort((a, b) => keepValue(p, a) - keepValue(p, b))[0];
+  return { cmd: { type: 'PLACE_TRAP', card, kind, node: best }, bias: TRAPS[kind].cost + 1.5 + bestScore + (rival.gloria >= state.goal - 5 ? 2 : 0) };
+}
+
 /** Executa uma única decisão da IA (para a interface poder animar passo a passo). */
 export function aiStep(state: GameState): void {
   if (state.phase === 'GAME_OVER') return;
@@ -164,6 +196,8 @@ export function aiStep(state: GameState): void {
     if (canEffect(state, card)) options.push({ cmd: { type: 'PLAY_CARD_EFFECT', card }, bias: placeAllows(p, CARDS[card]) && CARDS[card].use !== 'U' ? 1 : 0 });
   }
   if (canBuyRelic(state)) options.push({ cmd: { type: 'BUY_RELIC' }, bias: 0 });
+  const trap = planTrap(state, p);
+  if (trap) options.push(trap);
 
   let best = options[0].cmd;
   let bestValue = -Infinity;

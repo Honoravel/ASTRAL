@@ -4,8 +4,8 @@ import { buildBoard, DIST, NODES, reach, RETURNS, SHORTCUTS, TARTARUS, templeOf 
 import { CARDS } from '../src/engine/cards';
 import { G, GODS, SIGNS } from '../src/engine/data';
 import { DESTINIES } from '../src/engine/destiny';
-import { altarFavor } from '../src/engine/config';
-import { apply, costFor, deserialize, newGame, RULES, serialize, walk } from '../src/engine/game';
+import { altarFavor, EV, EVENTS } from '../src/engine/config';
+import { apply, costFor, deserialize, effectBlock, newGame, RULES, sabotageTargets, serialize, TRAP_NODES, walk } from '../src/engine/game';
 import type { GameState, HouseType } from '../src/engine/types';
 
 const game = (n = 2, seed = 7): GameState =>
@@ -456,7 +456,7 @@ describe('templos v1.8', () => {
     arrive(g, G.zeus);
     expect(g.pending!.options![0].disabled).toBe(true);
     expect(g.pending!.options![1].disabled).toBe(false); // Decreto Olímpico não tem o limite
-    apply(g, { type: 'ANSWER', value: 3 });
+    apply(g, { type: 'ANSWER', value: g.pending!.options!.length - 1 });
     g.current = 0;
     g.round = 4;
     arrive(g, G.zeus);
@@ -469,10 +469,11 @@ describe('templos v1.8', () => {
     arrive(g, G.hefesto);
     apply(g, { type: 'ANSWER', value: 0 });
     const p = g.players[0];
-    expect(p).toMatchObject({ dracmas: 15, invest: { forge: RULES.forgeTotal, harvest: 0 } });
+    expect(p.dracmas).toBe(15);
+    expect(p.investments).toEqual([{ kind: 'forge', incomePerRound: 1, remainingRounds: RULES.forgeTotal, received: 0 }]);
     apply(g, { type: 'END_TURN' }); // fecha a rodada 1
     expect(p.dracmas).toBe(16);
-    expect(p.invest.forge).toBe(RULES.forgeTotal - 1);
+    expect(p.investments[0]).toMatchObject({ remainingRounds: RULES.forgeTotal - 1, received: 1 });
     arrive(g, G.hefesto);
     expect(g.pending!.options![0].disabled).toBe(true);
     apply(g, { type: 'ANSWER', value: g.pending!.options!.length - 1 });
@@ -485,7 +486,7 @@ describe('templos v1.8', () => {
       apply(g, { type: 'END_TURN' });
       apply(g, { type: 'END_TURN' });
     }
-    expect(p.invest.harvest).toBe(0);
+    expect(p.investments.some((i) => i.kind === 'harvest')).toBe(false);
     expect(p.dracmas - before).toBe(RULES.harvestRounds * RULES.harvestYield + 6);
   });
 
@@ -559,6 +560,241 @@ describe('templos v1.8', () => {
   });
 });
 
+describe('sistemas estratégicos v1.9', () => {
+  const trap = (g: GameState, node: number, kind = 0): void => {
+    const p = g.players[g.current];
+    apply(g, { type: 'PLACE_TRAP', card: p.hand[0], kind, node });
+  };
+
+  it('arma armadilha oculta, com limites de quantidade e de casas', () => {
+    const g = game();
+    const p = g.players[0];
+    p.dracmas = 20;
+    expect(() => trap(g, templeOf(0))).toThrow();
+    expect(() => trap(g, 14)).toThrow(); // Nêmesis
+    expect(() => trap(g, 52)).toThrow(); // Tártaro
+    expect(TRAP_NODES).toHaveLength(96 - 12 - 4 - 2);
+    trap(g, 5);
+    expect(p.dracmas).toBe(18);
+    expect(p.hand).toHaveLength(5);
+    expect(g.current).toBe(1);
+    expect(g.traps).toEqual([{ id: 1, owner: 0, node: 5, kind: 0, expiresAtRound: 1 + RULES.trapRounds }]);
+    expect(g.log.some((l) => /casa 05/.test(l.text))).toBe(false); // o registro público não revela a casa
+    apply(g, { type: 'END_TURN' });
+    trap(g, 6);
+    apply(g, { type: 'END_TURN' });
+    expect(() => trap(g, 7)).toThrow(/2 armadilhas/);
+  });
+
+  it('dispara no adversário durante o movimento exato, uma única vez, antes do efeito da casa', () => {
+    const g = game();
+    g.players[0].dracmas = 20;
+    trap(g, 1, 0); // Rede de Hefesto numa casa de Dracmas
+    trap(g, 2, 1); // do jogador 1: Névoa de Hécate
+    const q = g.players[1];
+    // De volta ao jogador 0: é imune à própria armadilha na casa 01 e cai na do adversário na 02.
+    const p = g.players[0];
+    Object.assign(p, { pos: 0, dracmas: 5, hubris: 0 });
+    p.hand[0] = 1;
+    apply(g, { type: 'PLAY_CARD_MOVE', card: 1, dest: 2 });
+    expect(p).toMatchObject({ pos: 2, dracmas: 6, hubris: 1 });
+    expect(g.traps.map((t) => t.node)).toEqual([1]);
+    expect(g.lastTrap).toMatchObject({ node: 2, owner: 1, victim: 0 });
+    // O jogador 1 atravessa a casa 01: perde 2 Dracmas na armadilha e depois recebe a passagem (+1).
+    Object.assign(q, { pos: 0, dracmas: 5 });
+    q.hand[0] = 1;
+    apply(g, { type: 'PLAY_CARD_MOVE', card: 1, dest: 2 });
+    expect(q).toMatchObject({ pos: 2, dracmas: 4 });
+    expect(g.traps).toHaveLength(0);
+    expect(g.lastMove!.events.map((e) => e.node)).toEqual([1, 1]);
+  });
+
+  it('armadilha expira sem efeito após três rodadas completas', () => {
+    const g = game();
+    trap(g, 5);
+    for (let i = 0; i < 2 * RULES.trapRounds - 2; i++) apply(g, { type: 'END_TURN' });
+    expect(g.traps).toHaveLength(1);
+    apply(g, { type: 'END_TURN' });
+    apply(g, { type: 'END_TURN' });
+    expect(g.round).toBe(1 + RULES.trapRounds);
+    expect(g.traps).toHaveLength(1); // armada na rodada 1, dura as rodadas 2, 3 e 4
+    apply(g, { type: 'END_TURN' });
+    expect(g.round).toBe(2 + RULES.trapRounds);
+    expect(g.traps).toHaveLength(0);
+    expect(g.lastTrap).toBeNull();
+  });
+
+  it('limita sabotagens: alvo fora do Tártaro e no máximo duas recebidas por rodada', () => {
+    const g = game(3);
+    const [a, b, c] = g.players;
+    g.players.forEach((p) => Object.assign(p, { dracmas: 10, favor: 3 }));
+    b.jailed = true;
+    expect(sabotageTargets(g, 0)).toEqual([2]);
+    a.hand = [4, 2, 0, 1, 3, 5]; // 5 de Paus (−1 Favor) e 3 de Paus (roubo)
+    apply(g, { type: 'PLAY_CARD_EFFECT', card: 4 });
+    expect(c.favor).toBe(2);
+    expect(c.used.sabIn).toBe(1);
+    c.used.sabIn = RULES.sabotageInPerRound;
+    g.current = 0;
+    g.phase = 'CHOOSE_ACTION';
+    a.sabDone = false;
+    expect(effectBlock(g, 2)).toMatch(/Nenhum alvo/);
+    expect(() => apply(g, { type: 'PLAY_CARD_EFFECT', card: 2 })).toThrow();
+    expect(a.hand).toContain(2); // a carta só é descartada após ação válida
+    expect(() => apply(g, { type: 'SABOTAGE', kind: 'maldicao', target: 2 })).toThrow(/desativadas/);
+  });
+
+  it('Decreto de Zeus anula uma sabotagem política e Intriga de Atena tira Favor', () => {
+    const g = game();
+    const [a, b] = g.players;
+    g.players.forEach((p) => Object.assign(p, { dracmas: 10, favor: 3 }));
+    b.decree = true;
+    stepTo(g, templeOf(G.atena) - 1);
+    const at = g.pending!.options!.findIndex((o) => o.label.startsWith('Intriga'));
+    apply(g, { type: 'ANSWER', value: at });
+    expect(b).toMatchObject({ favor: 3, decree: false });
+    expect(a.dracmas).toBe(7);
+    apply(g, { type: 'END_TURN' });
+    stepTo(g, templeOf(G.atena) - 1);
+    apply(g, { type: 'ANSWER', value: at });
+    expect(b.favor).toBe(2);
+  });
+
+  it('limita o Favor a 10 e registra o histórico das eleições', () => {
+    const g = game();
+    g.players[0].favor = 9;
+    stepTo(g, 3); // casa 04: Favor +2
+    expect(g.players[0].favor).toBe(RULES.favorCap);
+    g.round = RULES.electionEvery;
+    apply(g, { type: 'END_TURN' });
+    expect(g.elections).toEqual([{ round: 6, winner: 0, votes: [10, 1] }]);
+    expect(g.oracle.holder).toBe(0);
+  });
+
+  it('paga investimentos a quem está no Tártaro e informa o total recebido', () => {
+    const g = game();
+    const p = g.players[0];
+    p.investments.push({ kind: 'harvest', incomePerRound: 2, remainingRounds: 2, received: 0 });
+    Object.assign(p, { jailed: true, pos: TARTARUS, dracmas: 0 });
+    g.current = 1;
+    apply(g, { type: 'END_TURN' });
+    expect(p.dracmas).toBe(2);
+    expect(p.investments[0]).toMatchObject({ remainingRounds: 1, received: 2 });
+  });
+
+  it('devolve a mão a seis cartas ao fim da ação', () => {
+    const g = game();
+    const p = g.players[0];
+    p.hand.push(g.deck.pop()!, g.deck.pop()!);
+    apply(g, { type: 'END_TURN' });
+    expect(g.pending).toMatchObject({ kind: 'discard', count: 2, player: 0 });
+    apply(g, { type: 'ANSWER', value: p.hand.slice(0, 2) });
+    expect(p.hand).toHaveLength(RULES.hand);
+    expect(g.current).toBe(1);
+  });
+
+  it('teto de 4 Dracmas de passagem por movimento', () => {
+    const g = game();
+    const p = g.players[0];
+    p.pos = 0;
+    walk(g, p, [1, 12, 20, 31, 39, 49, 2]); // seis casas de Dracmas atravessadas
+    expect(p.dracmas).toBe(RULES.startDracmas + RULES.passDracmaCap);
+  });
+
+  it('revela um evento global após a eleição, válido por seis rodadas', () => {
+    const g = game();
+    expect(g.globalEvent).toBeNull();
+    for (let i = 0; i < 2 * RULES.eventEvery; i++) apply(g, { type: 'END_TURN' });
+    expect(g.round).toBe(7);
+    const first = g.globalEvent!;
+    expect(first).toMatchObject({ startedAtRound: 7, expiresAtRound: 12 });
+    expect(EVENTS[first.id]).toBeDefined();
+    for (let i = 0; i < 2 * (RULES.eventEvery - 1); i++) apply(g, { type: 'END_TURN' });
+    expect(g.globalEvent).toEqual(first);
+    apply(g, { type: 'END_TURN' });
+    apply(g, { type: 'END_TURN' });
+    expect(g.round).toBe(13);
+    expect(g.globalEvent!.id).not.toBe(first.id);
+    expect(g.globalEvent).toMatchObject({ startedAtRound: 13, expiresAtRound: 18 });
+  });
+
+  it('aplica os efeitos dos eventos globais', () => {
+    const on = (id: number): GameState => {
+      const g = game();
+      g.globalEvent = { id, startedAtRound: 1, expiresAtRound: 6 };
+      return g;
+    };
+    let g = on(EV.demeter);
+    g.players[0].pos = 0;
+    walk(g, g.players[0], [1, 12, 2]);
+    expect(g.players[0].dracmas).toBe(RULES.startDracmas + 3); // +2 na primeira casa de Dracmas, +1 na segunda
+
+    g = on(EV.atena);
+    const leo = g.players[0];
+    expect(costFor(leo, CARDS[34], g)).toBe(2); // 7 de Espadas: 3 → 2
+    expect(costFor(leo, CARDS[29], g)).toBe(1); // 2 de Espadas: custa 1 e não fica gratuita
+    leo.used.atena = 1;
+    expect(costFor(leo, CARDS[34], g)).toBe(3);
+
+    g = on(EV.zeus);
+    Object.assign(g.players[0], { hubris: 5, dracmas: 3 });
+    apply(g, { type: 'END_TURN' });
+    apply(g, { type: 'END_TURN' });
+    expect(g.players[0].dracmas).toBe(2);
+
+    g = on(EV.poseidon);
+    stepTo(g, 87); // Tesouro
+    expect(g.players[0].dracmas - RULES.startDracmas).toBeGreaterThanOrEqual(RULES.treasureMin + 1);
+  });
+
+  it('contratos: desligados por padrão; ligados, concluem exatamente uma vez', () => {
+    const g = game();
+    g.players.forEach((p) => Object.assign(p, { dracmas: 20, favor: 0 }));
+    stepTo(g, templeOf(G.afrodite) - 1);
+    expect(g.pending!.options!.some((o) => o.label.startsWith('Aceitar contrato'))).toBe(false);
+    apply(g, { type: 'ANSWER', value: g.pending!.options!.length - 1 });
+
+    RULES.modContracts = 1;
+    try {
+      apply(g, { type: 'END_TURN' });
+      const p = g.players[0];
+      stepTo(g, templeOf(G.afrodite) - 1);
+      const at = g.pending!.options!.findIndex((o) => o.label.startsWith('Aceitar contrato'));
+      apply(g, { type: 'ANSWER', value: at });
+      expect(p.contract).toEqual({ god: G.afrodite, progress: 0, regions: [] });
+      apply(g, { type: 'END_TURN' });
+      for (const expected of [2, 4]) {
+        stepTo(g, 3); // casa 04: +2 Favores
+        expect(p.contract!.progress).toBe(expected);
+        apply(g, { type: 'END_TURN' });
+      }
+      stepTo(g, 3);
+      expect(p.contract).toBeNull();
+      expect(p.contractsDone).toEqual([G.afrodite]);
+      expect(p.gloria).toBe(2);
+      apply(g, { type: 'END_TURN' });
+      stepTo(g, templeOf(G.afrodite) - 1);
+      expect(g.pending!.options!.some((o) => o.label.startsWith('Aceitar contrato'))).toBe(false);
+    } finally {
+      RULES.modContracts = 0;
+    }
+  });
+
+  it('a IA não usa armadilhas ocultas dos outros ao decidir', () => {
+    const g = game(2, 21);
+    const before = JSON.stringify(g);
+    aiStep(g);
+    const chosen = g.lastMove ? g.lastMove.destination : -1;
+    const h = game(2, 21);
+    for (const node of [1, 2, 3, 4, 5, 6].map((d) => (h.players[0].pos + d) % 96).filter((n) => TRAP_NODES.includes(n))) {
+      h.traps.push({ id: 100 + node, owner: 1, node, kind: 0, expiresAtRound: 9 });
+    }
+    aiStep(h);
+    expect(h.lastMove ? h.lastMove.destination : -1).toBe(chosen);
+    expect(before).toContain('"traps":[]');
+  });
+});
+
 describe('propriedades', () => {
   it('é determinística por semente, mantém recursos não negativos e termina', () => {
     const play = (seed: number) => {
@@ -591,11 +827,13 @@ describe('propriedades', () => {
     const old = JSON.parse(serialize(g));
     old.version = 1;
     delete old.lastMove;
-    for (const q of old.players) for (const k of ['invest', 'duelBonus', 'divineDiscount', 'gloryRound']) delete q[k];
+    for (const q of old.players) for (const k of ['investments', 'duelBonus', 'divineDiscount', 'gloryRound', 'decree', 'sabDone', 'blocked', 'contract', 'contractsDone']) delete q[k];
+    for (const k of ['traps', 'trapSeq', 'lastTrap', 'globalEvent', 'elections']) delete old[k];
     const migrated = deserialize(JSON.stringify(old));
-    expect(migrated.version).toBe(3);
+    expect(migrated.version).toBe(4);
     expect(migrated.lastMove).toBeNull();
-    expect(migrated.players[0]).toMatchObject({ invest: { forge: 0, harvest: 0 }, duelBonus: 0, gloryRound: null });
+    expect(migrated.players[0]).toMatchObject({ investments: [], duelBonus: 0, gloryRound: null, contract: null });
+    expect(migrated).toMatchObject({ traps: [], globalEvent: null, elections: [] });
     stepTo(migrated, 0);
     expect(migrated.players[0].dracmas).toBe(RULES.startDracmas + 2);
   });

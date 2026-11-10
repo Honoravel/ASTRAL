@@ -55,13 +55,19 @@ export const cardName = (card: Card): string => `${card.rank} de ${card.suit}`;
 export const useLabel = (card: Card): string =>
   card.use === 'U' ? 'Universal' : card.use === 'E' ? 'Elemental' : `Divina: ${GODS[card.god!].name}`;
 
+/**
+ * Cartas existentes cujo efeito é uma sabotagem (v1.9): seguem os limites de sabotagem
+ * (alvo fora do Tártaro, no máximo duas recebidas por rodada, proteção política).
+ */
+export const SAB_CARDS: Record<number, string> = { 2: 'roubo', 4: 'politica', 7: 'ataque', 11: 'roubo', 25: 'deslocamento', 32: 'interferencia' };
+
 /** Marcador do alvo escolhido dentro das operações de um `target`. */
 export const T = -1;
 
 /** Operações do efeito de cada Arcano Menor para o jogador `p`. */
 export function effectOps(cardId: number, p: number): Op[] {
   const g = (res: Res, n: number): Op => ({ t: 'res', p, res, n });
-  const foe = (prompt: string, ops: Op[]): Op => ({ t: 'target', p, prompt, ops });
+  const foe = (prompt: string, ops: Op[]): Op => ({ t: 'target', p, prompt, ops, ...(SAB_CARDS[cardId] ? { sab: SAB_CARDS[cardId] } : {}) });
   const cycle = (n: number, m: number): Op[] => [{ t: 'draw', p, n }, { t: 'discard', p, n: m }];
   switch (cardId) {
     // Paus

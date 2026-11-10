@@ -85,6 +85,7 @@ export function boardSvg(): string {
       <text id="summit-next" class="summit-small" y="70"></text>
     </g>
     <g>${nodes()}</g>
+    <g id="traps"></g>
     <g id="highlights"></g>
     <g id="tokens"></g>
   </svg>`;
@@ -118,4 +119,26 @@ export function showHighlights(svg: SVGSVGElement, dests: number[], onPick: (des
     })
     .join('');
   layer.querySelectorAll<SVGCircleElement>('.dest').forEach((el) => el.addEventListener('click', () => onPick(Number(el.dataset.node))));
+}
+
+/** Marcadores das armadilhas do próprio jogador (os adversários não as veem). */
+export function showTraps(svg: SVGSVGElement, traps: { node: number; name: string }[]): void {
+  svg.querySelector('#traps')!.innerHTML = traps
+    .map((t) => {
+      const n = NODES[t.node];
+      return `<g class="trap" transform="translate(${n.position.x - 13},${n.position.y - 13})"><path d="M0,-7L6.5,5H-6.5Z"/><title>Sua armadilha: ${t.name}</title></g>`;
+    })
+    .join('');
+}
+
+/** Mostra por alguns instantes onde uma armadilha disparou. */
+export function flashTrap(svg: SVGSVGElement, node: number): void {
+  const n = NODES[node];
+  const el = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  el.setAttribute('class', 'trap-flash');
+  el.setAttribute('cx', String(n.position.x));
+  el.setAttribute('cy', String(n.position.y));
+  el.setAttribute('r', '24');
+  svg.querySelector('#traps')!.parentNode!.appendChild(el);
+  window.setTimeout(() => el.remove(), 2600);
 }

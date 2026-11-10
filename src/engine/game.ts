@@ -1,6 +1,6 @@
 import { COMMON, NODES, reach, TARTARUS, templeOf } from './board';
-import { altarFavor, RULES, TABLES } from './config';
-import { cardName, CARDS, effectOps, T } from './cards';
+import { altarFavor, CONTRACTS, EV, EVENTS, RULES, SABOTAGES, TABLES, TRAPS, type SabotageKind } from './config';
+import { cardName, CARDS, effectOps, SAB_CARDS, T } from './cards';
 import { AFFINITY, ELEMENT_SUIT, G, GODS, SIGNS, SUIT_ELEMENT } from './data';
 import { DESTINIES } from './destiny';
 import { d6, rand, shuffle } from './rng';
@@ -8,7 +8,7 @@ import type { Answer, Card, ChoiceOption, Command, EffectDefinition, FreePower, 
 
 export { RULES };
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 const RES_NAME: Record<Res, string> = { gloria: 'Glória', dracmas: 'Dracmas', favor: 'Favor', hubris: 'Húbris' };
 
 export function newGame(configs: PlayerConfig[], seed: number = Date.now() | 0): GameState {
@@ -19,7 +19,8 @@ export function newGame(configs: PlayerConfig[], seed: number = Date.now() | 0):
       pos: templeOf(SIGNS[c.sign].patron),
       gloria: 0, dracmas: RULES.startDracmas, favor: RULES.startFavor, hubris: 0,
       hand: [], relics: [], jailed: false, shield: false, discountNext: false, duelDone: false, used: {},
-      invest: { forge: 0, harvest: 0 }, duelBonus: 0, divineDiscount: false, gloryRound: null,
+      investments: [], duelBonus: 0, divineDiscount: false, gloryRound: null,
+      decree: false, sabDone: false, blocked: false, contract: null, contractsDone: [],
     })),
     current: 0,
     phase: 'RESOLVE_EFFECTS',
@@ -31,6 +32,7 @@ export function newGame(configs: PlayerConfig[], seed: number = Date.now() | 0):
     log: [], winner: null, seed, goal: RULES.goal,
     stats: { duels: 0, jails: configs.map(() => 0) },
     lastMove: null,
+    traps: [], trapSeq: 0, lastTrap: null, globalEvent: null, elections: [],
   };
   state.deck = shuffle(state, CARDS.map((c) => c.id));
   state.destiny = shuffle(state, DESTINIES.map((d) => d.id));
@@ -44,7 +46,10 @@ export function newGame(configs: PlayerConfig[], seed: number = Date.now() | 0):
 // ---------- utilitários ----------
 
 export const currentPlayer = (state: GameState): Player => state.players[state.current];
-export const has = (p: Player, relic: number): boolean => p.relics.includes(relic);
+/** O jogador tem a relíquia e ela não está bloqueada por sabotagem. */
+export const has = (p: Player, relic: number): boolean => !p.blocked && p.relics.includes(relic);
+const on = (key: 'modTraps' | 'modEvents' | 'modContracts' | 'modSabotage'): boolean => RULES[key] > 0;
+const event = (state: GameState, id: number): boolean => state.globalEvent?.id === id;
 
 function say(state: GameState, player: number | null, text: string): void {
   state.log.push({ player, text });
@@ -61,7 +66,38 @@ export function others(state: GameState, id: number): number[] {
 function change(p: Player, res: Res, n: number): number {
   const before = p[res];
   p[res] = Math.max(0, before + n);
+  if (res === 'favor') p.favor = Math.min(RULES.favorCap, p.favor);
   return p[res] - before;
+}
+
+// ---------- contratos divinos (módulo opcional) ----------
+
+type TrackKind = 'favor' | 'hubrisRemoved' | 'stopRegion' | 'duelWin' | 'duelWinAttacker' | 'election' | 'investDone' | 'investIncome' | 'betGain' | 'trade';
+const CONTRACT_KIND: TrackKind[] = ['favor', 'election', 'hubrisRemoved', 'stopRegion', 'duelWin', 'duelWinAttacker', 'investDone', 'betGain', 'trade', 'investIncome', 'favor', 'stopRegion'];
+
+/** Registra progresso no contrato ativo do jogador e paga a recompensa ao concluir. */
+function track(state: GameState, p: Player, kind: TrackKind, n = 1): void {
+  const c = p.contract;
+  if (!c || CONTRACT_KIND[c.god] !== kind) return;
+  const def = CONTRACTS[c.god];
+  if (c.god === G.zeus) c.progress = p.favor; // condição de estado
+  else if (kind === 'stopRegion') {
+    if (!c.regions.includes(n)) c.regions.push(n);
+    c.progress = c.regions.length;
+  } else c.progress += n;
+  if (c.progress < def.goal) return;
+  p.contract = null;
+  p.contractsDone.push(c.god);
+  for (const [res, amount] of def.reward) change(p, res, amount);
+  say(state, p.id, `${p.name} cumpre o contrato de ${GODS[c.god].name} (${def.text.toLowerCase()}) e recebe a recompensa.`);
+}
+
+/** Altera um recurso e registra o progresso de contratos ligado a ele. */
+function gain(state: GameState, p: Player, res: Res, n: number): number {
+  const delta = change(p, res, n);
+  if (res === 'favor' && delta > 0) track(state, p, 'favor', delta);
+  if (res === 'hubris' && delta < 0) track(state, p, 'hubrisRemoved', -delta);
+  return delta;
 }
 
 /** Garante `n` cartas no baralho, reembaralhando o descarte por baixo se preciso. */
@@ -139,11 +175,19 @@ function martelo(p: Player, card: Card): boolean {
 }
 
 /** Custo do efeito: −1 no naipe do elemento do signo; descontos de carta/relíquia não acumulam entre si. */
-export function costFor(p: Player, card: Card): number {
+export function costFor(p: Player, card: Card, state?: GameState): number {
   let cost = card.cost;
   if (ELEMENT_SUIT[SIGNS[p.sign].element] === card.suit) cost--;
   if (p.discountNext || martelo(p, card) || (p.divineDiscount && card.use === 'D')) cost--;
-  return Math.max(0, cost);
+  cost = Math.max(0, cost);
+  // Conselho de Atena: nunca torna gratuita uma carta que custa ao menos 1.
+  if (state && event(state, EV.atena) && card.suit === 'Espadas' && !p.used.atena && cost >= 2) cost--;
+  return cost;
+}
+
+/** Adversários que podem ser alvo de uma sabotagem: fora do Tártaro e abaixo do limite por rodada. */
+export function sabotageTargets(state: GameState, by: number): number[] {
+  return others(state, by).filter((id) => !state.players[id].jailed && (state.players[id].used.sabIn ?? 0) < RULES.sabotageInPerRound);
 }
 
 /** A carta pode ter o efeito usado na casa atual? (U: qualquer casa; E: templo do elemento; D: templo nomeado.) */
@@ -157,10 +201,37 @@ export function placeAllows(p: Player, card: Card): boolean {
 
 const acting = (state: GameState): boolean => state.phase === 'CHOOSE_ACTION' && !currentPlayer(state).jailed;
 
-export function canEffect(state: GameState, cardId: number): boolean {
+/** Motivo pelo qual o efeito da carta não pode ser usado agora, ou null se pode. */
+export function effectBlock(state: GameState, cardId: number): string | null {
   const p = currentPlayer(state);
   const card = CARDS[cardId];
-  return acting(state) && p.hand.includes(cardId) && placeAllows(p, card) && p.dracmas >= costFor(p, card);
+  if (state.phase !== 'CHOOSE_ACTION' || !p.hand.includes(cardId)) return 'Não é o momento de usar cartas.';
+  if (p.jailed) return 'Preso no Tártaro.';
+  if (!placeAllows(p, card)) {
+    return card.use === 'D' ? `Só no Templo de ${GODS[card.god!].name} ou em templo afim.` : 'Só em templo do elemento da carta ou em templo afim.';
+  }
+  const cost = costFor(p, card, state);
+  if (p.dracmas < cost) return `Faltam ${cost - p.dracmas} Dracma${cost - p.dracmas > 1 ? 's' : ''}.`;
+  if (SAB_CARDS[cardId]) {
+    if (p.sabDone) return 'Você já sabotou neste turno.';
+    if (sabotageTargets(state, p.id).length === 0) return 'Nenhum alvo válido para sabotagem.';
+  }
+  return null;
+}
+
+export const canEffect = (state: GameState, cardId: number): boolean => effectBlock(state, cardId) === null;
+
+/** Casas onde se pode armar armadilha: não em templos, Delfos, Tártaro ou Nêmesis. */
+export const TRAP_NODES: number[] = NODES.filter((n) => !['templo', 'delfos', 'tartaro', 'nemesis'].includes(n.type)).map((n) => n.id);
+
+/** Motivo pelo qual não se pode armar a armadilha, ou null se pode. */
+export function trapBlock(state: GameState, kind: number): string | null {
+  const p = currentPlayer(state);
+  if (!on('modTraps')) return 'Armadilhas desativadas.';
+  if (!acting(state)) return 'Não é o momento.';
+  if (state.traps.filter((t) => t.owner === p.id).length >= RULES.trapMax) return `Você já tem ${RULES.trapMax} armadilhas ativas.`;
+  if (p.dracmas < TRAPS[kind].cost) return `Faltam ${TRAPS[kind].cost - p.dracmas} Dracmas.`;
+  return null;
 }
 
 export function moveOptions(state: GameState, cardId: number, mod = 0): Map<number, number[]> {
@@ -222,12 +293,14 @@ export function templeOptions(state: GameState, p: Player, region: number): Choi
       return [
         opt(`Ascensão: 6 Dracmas → +2 Glórias, +1 Húbris${wait}`, D >= 6 && zeusReady(state, p), [g('dracmas', -6), g('gloria', 2), g('hubris', 1), { t: 'zeusMark', p: id }]),
         opt('Decreto Olímpico: 3 Favores → +1 Glória', F >= 3, [g('favor', -3), g('gloria', 1)]),
+        opt('Decreto de Proteção: 2 Favores → anula a próxima sabotagem política contra você, até a eleição', F >= 2 && !p.decree, [g('favor', -2), { t: 'decree', p: id }]),
       ];
     }
     case G.hera:
       return [
-        opt('Influência: 2 Favores → 4 Dracmas', F >= 2, [g('favor', -2), g('dracmas', 4)]),
-        opt('Influência: 5 Dracmas → 2 Favores', D >= 5, [g('dracmas', -5), g('favor', 2)]),
+        opt('Influência: 2 Favores → 4 Dracmas', F >= 2, [g('favor', -2), g('dracmas', 4), { t: 'track', p: id, kind: 'trade' }]),
+        opt('Influência: 5 Dracmas → 2 Favores', D >= 5, [g('dracmas', -5), g('favor', 2), { t: 'track', p: id, kind: 'trade' }]),
+        opt('Campanha: 3 Dracmas → +1 Favor', D >= 3, [g('dracmas', -3), g('favor', 1)]),
         opt('Proteção Real: 2 Favores → escudo contra perda de Glória', F >= 2, [g('favor', -2), { t: 'shield', p: id }]),
       ];
     case G.apolo:
@@ -244,6 +317,8 @@ export function templeOptions(state: GameState, p: Player, region: number): Choi
       return [
         opt('Julgamento: 3 Dracmas → disputar 2 Favores de um adversário (falha: +1 Húbris)', D >= 3, [g('dracmas', -3), { t: 'target', p: id, prompt: 'Disputar Favores de quem?', ops: [{ t: 'dispute', p: id, of: T }] }]),
         opt('Estratégia: 2 Favores → reorganizar 3 cartas do Destino', F >= 2, [g('favor', -2), reorder]),
+        opt('Intriga: 3 Dracmas → um adversário perde 1 Favor', D >= 3 && !p.sabDone && sabotageTargets(state, id).length > 0,
+          [g('dracmas', -3), { t: 'target', p: id, prompt: 'Intrigar contra quem?', sab: 'politica', ops: [{ t: 'res', p: T, res: 'favor', n: -1 }] }]),
       ];
     case G.ares:
       return [
@@ -253,7 +328,7 @@ export function templeOptions(state: GameState, p: Player, region: number): Choi
       ];
     case G.hefesto:
       return [
-        opt(`Forja: ${RULES.forgeCost} Dracmas → +1 Dracma por rodada até render ${RULES.forgeTotal}`, D >= RULES.forgeCost && p.invest.forge === 0, [g('dracmas', -RULES.forgeCost), { t: 'invest', p: id, kind: 'forge' }]),
+        opt(`Forja: ${RULES.forgeCost} Dracmas → +1 Dracma por rodada até render ${RULES.forgeTotal}`, D >= RULES.forgeCost && !p.investments.some((i) => i.kind === 'forge'), [g('dracmas', -RULES.forgeCost), { t: 'invest', p: id, kind: 'forge' }]),
         opt('Aprimoramento: 3 Dracmas → próxima carta divina custa −1', D >= 3 && !p.divineDiscount, [g('dracmas', -3), { t: 'divineDiscount', p: id }]),
       ];
     case G.dionisio:
@@ -266,13 +341,13 @@ export function templeOptions(state: GameState, p: Player, region: number): Choi
       ];
     case G.hermes:
       return [
-        opt('Comércio: vender 1 Glória por 5 Dracmas', p.gloria >= 1, [{ t: 'res', p: id, res: 'gloria', n: -1, raw: true }, g('dracmas', 5)]),
-        opt('Comércio: 3 Dracmas → 1 Favor', D >= 3, [g('dracmas', -3), g('favor', 1)]),
+        opt('Comércio: vender 1 Glória por 5 Dracmas', p.gloria >= 1, [{ t: 'res', p: id, res: 'gloria', n: -1, raw: true }, g('dracmas', 5), { t: 'track', p: id, kind: 'trade' }]),
+        opt('Comércio: 3 Dracmas → 1 Favor', D >= 3, [g('dracmas', -3), g('favor', 1), { t: 'track', p: id, kind: 'trade' }]),
         opt('Contrabando: 2 Dracmas → trocar até 3 cartas da mão', D >= 2 && p.hand.length > 0, [g('dracmas', -2), { t: 'swapUpTo', p: id, n: 3 }]),
       ];
     case G.demeter:
       return [
-        opt(`Colheita: ${RULES.harvestCost} Dracmas → +${RULES.harvestYield} Dracmas por rodada durante ${RULES.harvestRounds} rodadas`, D >= RULES.harvestCost && p.invest.harvest === 0, [g('dracmas', -RULES.harvestCost), { t: 'invest', p: id, kind: 'harvest' }]),
+        opt(`Colheita: ${RULES.harvestCost} Dracmas → +${RULES.harvestYield} Dracmas por rodada durante ${RULES.harvestRounds} rodadas`, D >= RULES.harvestCost && !p.investments.some((i) => i.kind === 'harvest'), [g('dracmas', -RULES.harvestCost), { t: 'invest', p: id, kind: 'harvest' }]),
         opt('Oferta da Terra: 3 Dracmas → +2 Favores', D >= 3, [g('dracmas', -3), g('favor', 2)]),
       ];
     case G.afrodite:
@@ -292,7 +367,8 @@ export function templeOptions(state: GameState, p: Player, region: number): Choi
 /** Paga o custo, descarta a carta e devolve os passos do efeito. */
 function playEffect(state: GameState, p: Player, cardId: number): Op[] {
   const card = CARDS[cardId];
-  change(p, 'dracmas', -costFor(p, card));
+  change(p, 'dracmas', -costFor(p, card, state));
+  if (event(state, EV.atena) && card.suit === 'Espadas') p.used.atena = 1;
   if (martelo(p, card)) p.used.martelo = 1;
   else if (p.divineDiscount && card.use === 'D') p.divineDiscount = false;
   else p.discountNext = false;
@@ -376,14 +452,47 @@ function passEffect(p: Player, def: EffectDefinition): string {
  * Percorre o caminho: aplica a passagem de cada casa intermediária, na ordem, e deixa o peão
  * na última casa sem resolver a parada. A casa inicial não é ativada.
  */
+/** Aplica a armadilha de outro jogador na casa, se houver. Não interrompe o movimento. */
+function springTrap(state: GameState, p: Player, node: number, result: MovementResult): void {
+  const at = state.traps.findIndex((t) => t.node === node && t.owner !== p.id);
+  if (at < 0) return;
+  const [trap] = state.traps.splice(at, 1);
+  const def = TRAPS[trap.kind];
+  for (const [res, n] of def.changes) gain(state, p, res, n);
+  if (def.redraw && p.hand.length > 0) {
+    discardCard(state, p, p.hand[Math.floor(rand(state) * p.hand.length)]);
+    drawCards(state, p, 1);
+  }
+  state.lastTrap = { seq: ++state.trapSeq, node, kind: trap.kind, owner: trap.owner, victim: p.id };
+  result.events.push({ node, text: `armadilha de ${state.players[trap.owner].name}, ${def.name}: ${def.text.toLowerCase()}` });
+}
+
+/**
+ * Percorre o caminho. Em cada casa: primeiro a armadilha, depois a passagem (só nas intermediárias).
+ * O peão fica na última casa sem resolver a parada. A casa inicial não é ativada.
+ */
 export function walk(state: GameState, p: Player, path: number[]): MovementResult {
   const result: MovementResult = { player: p.id, path: [...path], passedNodes: path.slice(0, -1), destination: path[path.length - 1], events: [] };
   let region = NODES[p.pos].region;
+  let passGained = 0;
+  let blessed = false;
   path.forEach((id, i) => {
     const node = NODES[id];
     p.pos = id;
+    springTrap(state, p, id, result);
     if (i < path.length - 1) {
       for (const def of node.onPass) {
+        if (def.k === 'res' && def.res === 'dracmas' && def.n > 0) {
+          // Ganhos de passagem têm teto por movimento; a Bênção de Deméter vale na primeira casa.
+          const bonus = !blessed && event(state, EV.demeter) ? 1 : 0;
+          blessed = true;
+          const n = Math.min(def.n + bonus, RULES.passDracmaCap - passGained);
+          if (n <= 0) continue;
+          passGained += n;
+          change(p, 'dracmas', n);
+          result.events.push({ node: id, text: `+${n} Dracma${n > 1 ? 's' : ''}` });
+          continue;
+        }
         const text = passEffect(p, def);
         if (text) result.events.push({ node: id, text });
       }
@@ -421,12 +530,13 @@ function judgement(state: GameState, p: Player): Op[] {
 /** Efeito de parada da casa onde o movimento terminou. */
 function land(state: GameState, p: Player): Op[] {
   const node = NODES[p.pos];
+  track(state, p, 'stopRegion', node.region);
   const id = p.id;
   const ops: Op[] = [];
   for (const def of node.onStop) {
     switch (def.k) {
       case 'res':
-        change(p, def.res, def.n);
+        gain(state, p, def.res, def.n);
         say(state, id, `Casa ${pad(node.id)}: ${p.name} ganha ${def.n} ${RES_NAME[def.res]}.`);
         break;
       case 'toll':
@@ -440,11 +550,15 @@ function land(state: GameState, p: Player): Op[] {
         say(state, id, `${def.table === 'provacao' ? 'Provação' : 'Evento'}: ${p.name} tira ${roll}: ${row.text}.`);
         const negative = row.changes.some(([res, n]) => (res === 'hubris' ? n > 0 : n < 0));
         if (negative && arco(state, p)) break;
-        for (const [res, n] of row.changes) change(p, res, n);
+        for (const [res, n] of row.changes) gain(state, p, res, n);
         break;
       }
       case 'treasure': {
-        const n = def.min + Math.floor(rand(state) * (def.max - def.min + 1));
+        let n = def.min + Math.floor(rand(state) * (def.max - def.min + 1));
+        if (event(state, EV.poseidon) && !p.used.mare) {
+          p.used.mare = 1;
+          n++;
+        }
         change(p, 'dracmas', n);
         say(state, id, `Tesouro: ${p.name} encontra ${n} Dracmas.`);
         break;
@@ -473,7 +587,10 @@ function land(state: GameState, p: Player): Op[] {
         const options: ChoiceOption[] = [
           ...templeOptions(state, p, node.region),
           { label: `Comprar ${god.relic.name} (${god.relic.price} Dracmas)`, ops: [{ t: 'buy', p: id, relic: node.region }], disabled: !relicAffordable(state, p, node.region) },
-          ...cards.map((c) => ({ label: `Jogar ${cardName(CARDS[c])} (${costFor(p, CARDS[c])} Dracmas): ${CARDS[c].text}`, ops: [{ t: 'playCard', p: id, card: c } as Op], disabled: p.dracmas < costFor(p, CARDS[c]) })),
+          ...cards.map((c) => ({ label: `Jogar ${cardName(CARDS[c])} (${costFor(p, CARDS[c], state)} Dracmas): ${CARDS[c].text}`, ops: [{ t: 'playCard', p: id, card: c } as Op], disabled: p.dracmas < costFor(p, CARDS[c], state) || (!!SAB_CARDS[c] && sabotageTargets(state, id).length === 0) })),
+          ...(on('modContracts') && !p.contract && !p.contractsDone.includes(node.region)
+            ? [{ label: `Aceitar contrato: ${CONTRACTS[node.region].text.toLowerCase()} → ${CONTRACTS[node.region].reward.map(([r, n]) => `+${n} ${RES_NAME[r]}`).join(', ')}`, ops: [{ t: 'acceptContract', p: id, god: node.region } as Op] }]
+            : []),
           { label: 'Nenhuma ação', ops: [] },
         ];
         if (options.some((o, i) => i < options.length - 1 && !o.disabled)) ops.push({ t: 'choice', p: id, prompt: `Templo de ${god.name}`, options });
@@ -512,33 +629,59 @@ function election(state: GameState): void {
   const tied = votes(first) === votes(second) && first.hubris === second.hubris && first.gloria === second.gloria;
   const tally = state.players.map((p) => `${p.name} ${votes(p)}`).join(', ');
   state.oracle = { holder: tied ? null : first.id, weaveUsed: false, protectUsed: false };
+  state.elections.push({ round: state.round, winner: tied ? null : first.id, votes: state.players.map(votes) });
+  for (const p of state.players) p.decree = false; // a proteção política vale até a eleição
   if (tied) {
     say(state, null, `Eleição em Delfos (${tally}): empate. O cargo de Oráculo fica vago.`);
   } else {
     change(first, 'gloria', 1);
     say(state, first.id, `Eleição em Delfos (${tally}): ${first.name} é o Oráculo e ganha 1 Glória.`);
+    track(state, first, 'election');
   }
 }
 
+/** Sorteia o próximo evento global (diferente do atual), válido pelas próximas `eventEvery` rodadas. */
+function revealEvent(state: GameState): void {
+  const options = EVENTS.map((_, i) => i).filter((i) => i !== state.globalEvent?.id);
+  const id = options[Math.floor(rand(state) * options.length)];
+  state.globalEvent = { id, startedAtRound: state.round + 1, expiresAtRound: state.round + RULES.eventEvery };
+  say(state, null, `Evento global: ${EVENTS[id].name}. ${EVENTS[id].text}`);
+}
+
+/** Fim da rodada completa, na ordem da seção 9.4 da v1.9. */
 function roundEnd(state: GameState): void {
+  // 1. Pagamentos de investimentos (inclusive para quem está preso).
+  for (const p of state.players) {
+    for (const inv of p.investments) {
+      inv.remainingRounds--;
+      inv.received += change(p, 'dracmas', inv.incomePerRound);
+      track(state, p, 'investIncome', inv.incomePerRound);
+      if (inv.remainingRounds === 0) {
+        say(state, p.id, `${inv.kind === 'forge' ? 'A Forja' : 'A Colheita'} de ${p.name} se encerra após render ${inv.received} Dracmas.`);
+        track(state, p, 'investDone');
+      }
+    }
+    p.investments = p.investments.filter((inv) => inv.remainingRounds > 0);
+  }
+  // 2. Efeitos de fim de rodada.
+  for (const p of state.players) {
+    if (event(state, EV.zeus) && p.hubris >= 5) change(p, 'dracmas', -1);
+    if (state.round % 3 === 0 && has(p, G.afrodite)) change(p, 'favor', 1);
+  }
+  state.traps = state.traps.filter((t) => t.expiresAtRound > state.round);
+  // 3. Evento global anterior expira.
+  if (state.globalEvent && state.globalEvent.expiresAtRound <= state.round) state.globalEvent = null;
+  // 4 e 5. Eleição e novo evento global.
   if (state.round % RULES.electionEvery === 0) {
     election(state);
     if (victory(state)) return;
   }
-  const cinto = state.round % 3 === 0;
+  if (on('modEvents') && state.round % RULES.eventEvery === 0) revealEvent(state);
+  // 6. Nova rodada.
   state.round++;
   for (const p of state.players) {
     p.used = {};
     if (has(p, G.demeter)) change(p, 'dracmas', 1);
-    if (p.invest.forge > 0) {
-      p.invest.forge--;
-      change(p, 'dracmas', 1);
-    }
-    if (p.invest.harvest > 0) {
-      p.invest.harvest--;
-      change(p, 'dracmas', RULES.harvestYield);
-    }
-    if (cinto && has(p, G.afrodite)) change(p, 'favor', 1);
   }
 }
 
@@ -557,6 +700,7 @@ function exec(state: GameState, op: Op): Op[] | null {
     case 'turnStart': {
       const p = P(op.p);
       p.duelDone = false;
+      p.sabDone = false;
       if (!p.jailed) return [{ t: 'refill', p: p.id }];
       const id = p.id;
       return [{
@@ -575,7 +719,7 @@ function exec(state: GameState, op: Op): Op[] | null {
     case 'res': {
       const p = P(op.p);
       if (op.res === 'gloria' && op.n < 0 && !op.raw && p.gloria > 0 && gloryBlocked(state, p)) return [];
-      change(p, op.res, op.n);
+      gain(state, p, op.res, op.n);
       return [];
     }
     case 'transfer': {
@@ -585,15 +729,29 @@ function exec(state: GameState, op: Op): Op[] | null {
       return [];
     }
     case 'target': {
-      const list = others(state, op.p).filter((id) => (op.filter === 'free' ? !P(id).jailed : op.filter === 'rich3' ? P(id).dracmas >= 3 : true));
+      const pool = op.sab ? sabotageTargets(state, op.p) : others(state, op.p);
+      const list = pool.filter((id) => (op.filter === 'free' ? !P(id).jailed : op.filter === 'rich3' ? P(id).dracmas >= 3 : true));
       if (list.length === 0) return [];
-      if (list.length === 1) return subst(op.ops, list[0]);
+      // Sabotagem: conta nos limites e pode ser anulada pelo Decreto de Proteção.
+      const hit = (id: number): Op[] => {
+        if (!op.sab) return subst(op.ops, id);
+        const victim = P(id);
+        P(op.p).sabDone = true;
+        victim.used.sabIn = (victim.used.sabIn ?? 0) + 1;
+        if (op.sab === 'politica' && victim.decree) {
+          victim.decree = false;
+          say(state, id, `O Decreto de Zeus protege ${victim.name} da sabotagem política.`);
+          return [];
+        }
+        return subst(op.ops, id);
+      };
+      if (list.length === 1) return hit(list[0]);
       if (!state.answer) {
         state.pending = { player: op.p, kind: 'target', prompt: op.prompt, players: list };
         return null;
       }
       const a = take(state);
-      return subst(op.ops, list.includes(a as number) ? (a as number) : list[0]);
+      return hit(list.includes(a as number) ? (a as number) : list[0]);
     }
     case 'choice': {
       const open = op.options.filter((o) => !o.disabled);
@@ -826,6 +984,12 @@ function exec(state: GameState, op: Op): Op[] | null {
         }
       } else if (fa > fd) result = `${a.name} vence e toma ${change(a, 'dracmas', -change(d, 'dracmas', -2))} Dracmas.`;
       else if (fd > fa) result = `${d.name} vence e recebe ${change(d, 'favor', -change(a, 'favor', -1))} Favor.`;
+      if (fa !== fd) {
+        const winner = fa > fd ? a : d;
+        if (event(state, EV.ares)) change(winner, 'dracmas', 1);
+        track(state, winner, 'duelWin');
+        if (winner === a) track(state, a, 'duelWinAttacker');
+      }
       say(state, a.id, `Duelo: ${a.name} (força ${fa}) × ${d.name} (força ${fd}). ${result}`);
       return [];
     }
@@ -860,14 +1024,47 @@ function exec(state: GameState, op: Op): Op[] | null {
       const p = P(op.p);
       const bet = -change(p, 'dracmas', -op.bet);
       const roll = d6(state);
-      if (roll >= 4) change(p, 'dracmas', bet * 2);
-      say(state, p.id, `Cassino Divino: ${p.name} aposta ${bet} e tira ${roll}: ${roll >= 4 ? `recebe ${bet * 2} Dracmas` : 'perde a aposta'}.`);
+      const prize = bet * 2 + (event(state, EV.festival) ? 1 : 0);
+      if (roll >= 4) {
+        change(p, 'dracmas', prize);
+        track(state, p, 'betGain', prize - bet);
+      }
+      say(state, p.id, `Cassino Divino: ${p.name} aposta ${bet} e tira ${roll}: ${roll >= 4 ? `recebe ${prize} Dracmas` : 'perde a aposta'}.`);
       return [];
     }
     case 'invest': {
       const p = P(op.p);
-      if (op.kind === 'forge') p.invest.forge = RULES.forgeTotal;
-      else p.invest.harvest = RULES.harvestRounds;
+      p.investments.push(op.kind === 'forge'
+        ? { kind: 'forge', incomePerRound: 1, remainingRounds: RULES.forgeTotal, received: 0 }
+        : { kind: 'harvest', incomePerRound: RULES.harvestYield, remainingRounds: RULES.harvestRounds, received: 0 });
+      return [];
+    }
+    case 'decree':
+      P(op.p).decree = true;
+      return [];
+    case 'track':
+      track(state, P(op.p), op.kind as TrackKind);
+      return [];
+    case 'acceptContract': {
+      const p = P(op.p);
+      p.contract = { god: op.god, progress: 0, regions: [] };
+      say(state, p.id, `${p.name} aceita o contrato de ${GODS[op.god].name}: ${CONTRACTS[op.god].text.toLowerCase()}.`);
+      if (op.god === G.zeus) track(state, p, 'favor', 0);
+      return [];
+    }
+    case 'sabotage': {
+      const by = P(op.p);
+      const of = P(op.of);
+      const kind = op.kind as SabotageKind;
+      say(state, by.id, `${by.name} sabota ${of.name}: ${SABOTAGES[kind].name}.`);
+      if (kind === 'roubo') change(by, 'dracmas', -change(of, 'dracmas', -2));
+      else if (kind === 'maldicao') change(of, 'hubris', 1);
+      else if (kind === 'bloqueio') of.blocked = true;
+      else if (kind === 'politica') change(of, 'favor', -1);
+      else if (of.hand.length > 0) {
+        discardCard(state, of, of.hand[Math.floor(rand(state) * of.hand.length)]);
+        drawCards(state, of, 1);
+      }
       return [];
     }
     case 'newHand': {
@@ -901,7 +1098,7 @@ function exec(state: GameState, op: Op): Op[] | null {
     case 'playCard': {
       const p = P(op.p);
       const card = CARDS[op.card];
-      if (!p.hand.includes(op.card) || !placeAllows(p, card) || p.dracmas < costFor(p, card)) return [];
+      if (!p.hand.includes(op.card) || !placeAllows(p, card) || p.dracmas < costFor(p, card, state)) return [];
       return playEffect(state, p, op.card);
     }
     case 'buy': {
@@ -936,8 +1133,11 @@ function exec(state: GameState, op: Op): Op[] | null {
       say(state, op.p, op.text);
       return [];
     case 'endTurn': {
-      if (victory(state)) return [];
       const ending = P(state.current);
+      // A mão volta a seis cartas ao fim da ação.
+      if (ending.hand.length > RULES.hand) return [{ t: 'discard', p: ending.id, n: ending.hand.length - RULES.hand }, { t: 'endTurn' }];
+      if (victory(state)) return [];
+      ending.blocked = false;
       if (!ending.jailed && ending.hubris >= RULES.wrathHubris) {
         say(state, ending.id, `A soberba de ${ending.name} (Húbris ${ending.hubris}) desperta a ira de Nêmesis.`);
         jail(state, ending);
@@ -1034,6 +1234,47 @@ export function apply(state: GameState, cmd: Command): void {
       }
       break;
     }
+    case 'PLACE_TRAP': {
+      const block = trapBlock(state, cmd.kind);
+      if (block) throw new Error(block);
+      if (!p.hand.includes(cmd.card)) throw new Error('A carta não está na mão.');
+      if (!TRAP_NODES.includes(cmd.node)) throw new Error('Casa inválida para armadilha.');
+      discardCard(state, p, cmd.card);
+      change(p, 'dracmas', -TRAPS[cmd.kind].cost);
+      // Uma casa comporta uma armadilha: a nova substitui a anterior, sem revelar se havia outra.
+      state.traps = state.traps.filter((t) => t.node !== cmd.node);
+      state.traps.push({ id: ++state.trapSeq, owner: p.id, node: cmd.node, kind: cmd.kind, expiresAtRound: state.round + RULES.trapRounds });
+      say(state, p.id, `${p.name} descarta ${cardName(CARDS[cmd.card])} e arma uma armadilha em segredo.`);
+      state.queue = [{ t: 'endTurn' }];
+      break;
+    }
+    case 'SABOTAGE': {
+      const kind = cmd.kind as SabotageKind;
+      const def = SABOTAGES[kind];
+      if (!on('modSabotage') || !def) throw new Error('Sabotagens diretas estão desativadas.');
+      if (!acting(state) || p.sabDone) throw new Error('Só uma sabotagem por turno.');
+      if (!sabotageTargets(state, p.id).includes(cmd.target)) throw new Error('Alvo inválido.');
+      if (p.dracmas < def.dracmas || p.favor < def.favor) throw new Error('Recursos insuficientes.');
+      change(p, 'dracmas', -def.dracmas);
+      change(p, 'favor', -def.favor);
+      const victim = state.players[cmd.target];
+      p.sabDone = true;
+      victim.used.sabIn = (victim.used.sabIn ?? 0) + 1;
+      if (kind === 'politica' && victim.decree) {
+        victim.decree = false;
+        say(state, victim.id, `O Decreto de Zeus protege ${victim.name} da sabotagem política.`);
+      } else {
+        state.queue = [{ t: 'sabotage', p: p.id, of: cmd.target, kind }];
+      }
+      break;
+    }
+    case 'ABANDON_CONTRACT':
+      if (!acting(state) || !p.contract) throw new Error('Não há contrato ativo.');
+      if (p.dracmas < RULES.contractAbandon) throw new Error('Dracmas insuficientes para abandonar o contrato.');
+      change(p, 'dracmas', -RULES.contractAbandon);
+      say(state, p.id, `${p.name} abandona o contrato de ${GODS[p.contract.god].name}.`);
+      p.contract = null;
+      break;
     case 'END_TURN':
       state.queue = [{ t: 'endTurn' }];
       break;
@@ -1066,6 +1307,19 @@ export function deserialize(json: string): GameState {
     }
     state.version = 3;
     if (!state.pending && state.queue.length > 0) run(state);
+  }
+  if (state.version === 3) {
+    // v3 → v4 (sistemas v1.9): armadilhas, eventos globais, contratos e investimentos detalhados.
+    Object.assign(state, { traps: [], trapSeq: 0, lastTrap: null, globalEvent: null, elections: [] });
+    for (const p of state.players) {
+      const old = (p as unknown as { invest?: { forge: number; harvest: number } }).invest ?? { forge: 0, harvest: 0 };
+      p.investments = [];
+      if (old.forge > 0) p.investments.push({ kind: 'forge', incomePerRound: 1, remainingRounds: old.forge, received: RULES.forgeTotal - old.forge });
+      if (old.harvest > 0) p.investments.push({ kind: 'harvest', incomePerRound: RULES.harvestYield, remainingRounds: old.harvest, received: (RULES.harvestRounds - old.harvest) * RULES.harvestYield });
+      delete (p as unknown as { invest?: unknown }).invest;
+      Object.assign(p, { decree: false, sabDone: false, blocked: false, contract: null, contractsDone: [] });
+    }
+    state.version = 4;
   }
   if (state.version !== SAVE_VERSION) throw new Error(`Versão de partida salva incompatível: ${state.version}.`);
   return state;

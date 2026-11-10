@@ -2,7 +2,8 @@
 
 Protótipo web do jogo de tabuleiro descrito na *Especificação consolidada de mecânicas v1.5*,
 com o *Sistema de casas v1.6* (efeitos de passagem e de parada) e os *templos v1.8*
-(ação principal, ação secundária, investimentos e afinidades de cartas):
+(ação principal, ação secundária, investimentos e afinidades de cartas) e as *mecânicas
+estratégicas v1.9* (armadilhas, sabotagem, política, eventos globais e contratos):
 2 a 4 jogadores (humanos no mesmo dispositivo e/ou IA) disputam a ascensão divina.
 Vence quem primeiro chegar a **20 de Glória**.
 
@@ -34,7 +35,8 @@ Outros comandos:
 - `src/ui/`: interface web (SVG + DOM).
 
 Humanos e IA usam a mesma API: `apply(state, command)`. Os comandos são
-`PLAY_CARD_MOVE`, `PLAY_CARD_EFFECT`, `BUY_RELIC`, `FREE_POWER`, `END_TURN` e `ANSWER`.
+`PLAY_CARD_MOVE`, `PLAY_CARD_EFFECT`, `PLACE_TRAP`, `BUY_RELIC`, `FREE_POWER`, `SABOTAGE`,
+`ABANDON_CONTRACT`, `END_TURN` e `ANSWER`.
 `ANSWER` responde à decisão pendente em `state.pending` (rota de teletransporte, alvo, descarte,
 saída do Tártaro, substituição de relíquia, lance de duelo). A rota do movimento é escolhida pelo
 destino: como cada bifurcação leva a casas distintas, o destino define o caminho.
@@ -99,6 +101,50 @@ secundária, comprar a relíquia, jogar o efeito de uma carta permitida ali, ou 
 | Afrodite | Persuasão: 3 Dracmas → +2 Favores | Encantamento: 2 Favores → 3 Dracmas de um adversário |
 | Poseidon | Tesouro Submerso: 1d6, +2 a 7 Dracmas (1: +1 Húbris) | Travessia: 3 Dracmas → casa comum da região seguinte |
 
+## Mecânicas estratégicas (v1.9)
+
+| Sistema | Estado | Como funciona no protótipo |
+|---|---|---|
+| Cartas de múltiplos usos | Ligado | Ao selecionar a carta: rotas de movimento, efeito com custo e motivo de indisponibilidade |
+| Armadilhas | Ligado (`modTraps`) | Ação principal: descarta uma carta, paga o custo e escolhe a casa. Ocultas, 2 por jogador, 3 rodadas |
+| Sabotagem por cartas | Ligado | 3 e 5 de Paus, 8 de Paus, Cavaleiro de Paus, Cavaleiro de Copas e 5 de Espadas seguem os limites |
+| Sabotagem direta | Desligado (`modSabotage`) | Comando `SABOTAGE` com os cinco tipos e custos da tabela, aguardando aprovação |
+| Política | Ligado | Campanha (Hera), Intriga (Atena), Decreto de Proteção (Zeus), teto de 10 Favores, histórico de eleições |
+| Investimentos | Ligado | Forja e Colheita pagam ao fim da rodada, inclusive no Tártaro; painel mostra renda, prazo e total |
+| Manipulação da mão | Ligado | Ações de Hermes, Ártemis, Apolo e Delfos; a mão volta a 6 ao fim da ação |
+| Eventos globais | Ligado (`modEvents`) | Um evento sorteado após cada eleição, válido por 6 rodadas |
+| Contratos divinos | Desligado (`modContracts`) | 12 contratos, aceitos na chegada ao templo; abandonar custa 2 Dracmas |
+
+Os módulos são ligados e desligados em `config.ts` (1 ou 0) e podem ser testados na simulação:
+
+```bash
+npm run sim -- 150 4 modContracts=1
+```
+
+Correspondência com os comandos da seção 11: `PLACE_TRAP`, `ABANDON_CONTRACT` e `SABOTAGE` são
+comandos; `START_INVESTMENT`, `PERFORM_POLITICAL_ACTION`, `MANIPULATE_HAND` e `ACCEPT_CONTRACT`
+são opções da decisão de chegada ao templo (respondidas com `ANSWER`); `RESOLVE_TRAP`,
+`PROCESS_INVESTMENT_INCOME`, `PROCESS_CONTRACT_PROGRESS`, `ACTIVATE_GLOBAL_EVENT` e
+`EXPIRE_GLOBAL_EVENT` são passos automáticos do motor (movimento e fim de rodada).
+
+### Conflitos com versões anteriores e como foram resolvidos
+
+- **Topologia**: a v1.9 pede para não alterar o mapa, mas os seis retornos foram pedidos depois da
+  v1.8 e continuam. Nenhuma casa foi criada.
+- **Economia v1.7**: esse documento não foi recebido. Da v1.9 foi aplicado o teto de 4 Dracmas de
+  passagem por movimento.
+- **Armadilhas**: não existem "cartas de armadilha" e a v1.9 proíbe criar cartas. Qualquer carta
+  da mão pode ser descartada para armar uma armadilha. Uma nova armadilha na mesma casa substitui
+  a anterior, sem revelar se havia outra.
+- **Sabotagem não tira Glória**: o 8 de Paus (v1.5) tira 1 Glória. Mantido, pois a v1.5 prevalece.
+- **Não ver cartas ocultas**: o 4 de Espadas (v1.5) mostra a mão de um adversário. Mantido.
+- **Decreto de Zeus**: a v1.8 já tinha o Decreto Olímpico (3 Favores → 1 Glória). O da v1.9
+  entrou como uma terceira opção, "Decreto de Proteção".
+- **Campanha de Hera** (3 Dracmas → 1 Favor) é pior que a Influência da v1.8 (5 Dracmas → 2 Favores).
+- **Motor imutável**: o motor altera o estado recebido; para simular, a IA trabalha numa cópia.
+- **Eventos globais**: o primeiro só aparece após a primeira eleição (rodada 6).
+- **Conselho de Atena**: vale por jogador, na primeira carta de Espadas da rodada.
+
 ## Regras presumidas (não especificadas na v1.5)
 
 Decididas com o autor:
@@ -147,15 +193,11 @@ Presumidas na implementação, a confirmar:
 - Foice rende no início de cada rodada a partir da segunda; Cinto rende ao fim das rodadas 3, 6, 9…
 - "Teletransportar até N casas adiante" permite ficar onde está.
 
-## Telemetria (IA × IA, 150 partidas, meta de 20 Glórias, com retornos)
+## Telemetria (IA × IA, 150 partidas, meta de 20 Glórias, regras v1.9)
 
 | Jogadores | Rodadas (média) | p10–p90 | Duelos/partida | Prisões/jogador | Relíquias/jogador |
 |---|---|---|---|---|---|
-| 2 | 21,3 | 16–27 | 0,3 | 0,04 | 0,7 |
-| 4 | 19,7 | 16–24 | 1,3 | 0,03 | 0,6 |
+| 2 | 22,7 | 17–28 | 0,3 | 0,09 | 0,3 |
+| 4 | 21,2 | 18–25 | 1,1 | 0,10 | 0,3 |
 
-Qualquer valor de `config.ts` pode ser sobrescrito na simulação com `chave=valor`:
-
-```bash
-npm run sim -- 150 4 goal=16
-```
+Com 4 jogadores a IA arma cerca de 7 armadilhas por partida e perto de 5 disparam.
