@@ -52,7 +52,7 @@ function nodes(): string {
     const r = radiusOf(n);
     const title =
       n.type === 'templo'
-        ? `Casa ${pad(n.id)} · Templo de ${god.name} — Parada: ${god.action.label}, ou comprar ${god.relic.name}.`
+        ? `Casa ${pad(n.id)} · Templo de ${god.name} — Parada: ${god.primary.name} ou ${god.secondary.name}; relíquia: ${god.relic.name}.`
         : `Casa ${pad(n.id)} · ${house.name} (região de ${god.name}) — Passagem: ${house.pass || 'nenhum efeito'}. Parada: ${house.stop}`;
     const badge = BADGE[n.type] ? `<g class="badge" transform="translate(12,-12)"><circle r="7"/><text y="3">${BADGE[n.type]}</text></g>` : '';
     const body =

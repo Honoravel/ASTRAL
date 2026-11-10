@@ -1,7 +1,8 @@
 # Ascensão ao Olimpo
 
 Protótipo web do jogo de tabuleiro descrito na *Especificação consolidada de mecânicas v1.5*,
-com o *Sistema de casas v1.6* (efeitos de passagem e de parada):
+com o *Sistema de casas v1.6* (efeitos de passagem e de parada) e os *templos v1.8*
+(ação principal, ação secundária, investimentos e afinidades de cartas):
 2 a 4 jogadores (humanos no mesmo dispositivo e/ou IA) disputam a ascensão divina.
 Vence quem primeiro chegar a **20 de Glória**.
 
@@ -65,6 +66,26 @@ ativada e teletransportes não ativam nada. O resultado fica em `state.lastMove`
 
 Pedágio (ou fiscalização de Nêmesis) sem saldo: paga o que tiver e ganha 1 Húbris, uma vez por casa.
 
+## Templos (v1.8)
+
+Ao **chegar** a um templo por movimento, o jogador escolhe uma opção: ação principal, ação
+secundária, comprar a relíquia, jogar o efeito de uma carta permitida ali, ou nada.
+
+| Templo | Ação principal | Ação secundária |
+|---|---|---|
+| Zeus | Ascensão: 6 Dracmas → +2 Glórias, +1 Húbris (1 vez a cada 3 rodadas) | Decreto Olímpico: 3 Favores → +1 Glória |
+| Hera | Influência: 2 Favores → 4 Dracmas, ou 5 Dracmas → 2 Favores | Proteção Real: 2 Favores → escudo |
+| Apolo | Visão Profética: 2 Dracmas → reorganizar 3 cartas do Destino | Purificação: 3 Dracmas → −2 Húbris |
+| Ártemis | Caçada: 1d6, +1 a 5 Dracmas (1: +1 Húbris) | Caça Sagrada: 2 Dracmas → comprar 2, descartar 2 |
+| Atena | Julgamento: 3 Dracmas → disputar 2 Favores (falha: +1 Húbris) | Estratégia: 2 Favores → reorganizar 3 do Destino |
+| Ares | Confronto: 2 Dracmas e 1 Favor → duelo à distância por 1 Glória | Preparação de Guerra: 2 Dracmas → +2 no próximo duelo |
+| Hefesto | Forja: 5 Dracmas → +1 por rodada até render 8 | Aprimoramento: 3 Dracmas → próxima carta divina −1 |
+| Dionísio | Êxtase: +5 Dracmas, +2 Húbris, mão nova | Cassino Divino: aposta 1–3 Dracmas |
+| Hermes | Comércio: 1 Glória → 5 Dracmas, ou 3 Dracmas → 1 Favor | Contrabando: 2 Dracmas → trocar até 3 cartas |
+| Deméter | Colheita: 4 Dracmas → +2 por rodada por 4 rodadas | Oferta da Terra: 3 Dracmas → +2 Favores |
+| Afrodite | Persuasão: 3 Dracmas → +2 Favores | Encantamento: 2 Favores → 3 Dracmas de um adversário |
+| Poseidon | Tesouro Submerso: 1d6, +2 a 7 Dracmas (1: +1 Húbris) | Travessia: 3 Dracmas → casa comum da região seguinte |
+
 ## Regras presumidas (não especificadas na v1.5)
 
 Decididas com o autor:
@@ -77,6 +98,18 @@ Presumidas na implementação, a confirmar:
 - Tabela signo–patrono: Áries–Ares, Touro–Hera, Gêmeos–Hermes, Câncer–Afrodite, Leão–Zeus,
   Virgem–Deméter, Libra–Atena, Escorpião–Dionísio, Sagitário–Hefesto, Capricórnio–Ártemis,
   Aquário–Apolo, Peixes–Poseidon. O patrono só define a casa inicial.
+- Afinidades de cartas (v1.8): tratadas como **permissão extra**. A carta listada num templo também
+  pode ter o efeito usado ali, sem perder os templos da v1.5. Não restringem nada.
+- Na chegada ao templo, as cartas oferecidas são as elementais/divinas válidas ali e as afins.
+- Caçada: o ganho é o valor do dado, limitado a 5. Tesouro Submerso: dado + 1.
+- Julgamento de Atena: cada lado rola 1d6; quem age vence só se tirar mais.
+- Confronto de Ares: o atacante vencedor toma 1 Glória do defensor (escudo e Égide protegem);
+  o defensor vencedor recebe 1 Favor, como no duelo comum.
+- Cassino Divino: com 4, 5 ou 6 o jogador recebe o dobro da aposta; com 1 a 3, perde-a.
+- Forja rende 8 Dracmas no total (1 por rodada). Colheita rende 2 por rodada por 4 rodadas.
+- Contrabando: descarta até 3 cartas e compra a mesma quantidade.
+- Vender Glória em Hermes não é bloqueado por escudo.
+- O limite de três rodadas vale só para a Ascensão de Zeus, a única ação principal que dá Glória.
 - Modelo econômico: **equilibrado** (a opção recomendada na v1.6), ainda não confirmado.
 - Altar: o jogador pode desistir de apostar. Cada Dracma além do primeiro soma 1 ao dado
   (a regra original não diferenciava as apostas).
@@ -101,18 +134,15 @@ Presumidas na implementação, a confirmar:
 - Foice rende no início de cada rodada a partir da segunda; Cinto rende ao fim das rodadas 3, 6, 9…
 - "Teletransportar até N casas adiante" permite ficar onde está.
 
-## Telemetria (IA × IA, 150 partidas, meta de 20 Glórias)
+## Telemetria (IA × IA, 150 partidas, meta de 20 Glórias, regras v1.8)
 
 | Jogadores | Rodadas (média) | p10–p90 | Duelos/partida | Prisões/jogador | Relíquias/jogador |
 |---|---|---|---|---|---|
-| 2 | 25,1 | 20–30 | 0,4 | 0,03 | 1,4 |
-| 4 | 23,7 | 20–28 | 1,7 | 0,02 | 1,2 |
+| 2 | 22,3 | 18–28 | 0,3 | 0,03 | 0,8 |
+| 4 | 21,0 | 17–25 | 1,3 | 0,03 | 0,8 |
 
-A meta da seção 15 da v1.5 (12–20 rodadas) ainda não é atingida com 20 Glórias. Com meta de 16
-Glórias, a simulação dá média de 18,3 rodadas (p10–p90: 15–22). Teste com:
+Qualquer valor de `config.ts` pode ser sobrescrito na simulação com `chave=valor`:
 
 ```bash
 npm run sim -- 150 4 goal=16
 ```
-
-Qualquer valor de `config.ts` pode ser sobrescrito assim (`chave=valor`).

@@ -1,7 +1,7 @@
 import { aiStep } from '../engine/ai';
 import { HOUSES, NODES } from '../engine/board';
 import { cardName, CARDS, useLabel } from '../engine/cards';
-import { ELEMENT_NAME, glyph, GODS, SIGNS } from '../engine/data';
+import { AFFINITY, ELEMENT_NAME, glyph, GODS, SIGNS } from '../engine/data';
 import { DESTINIES } from '../engine/destiny';
 import { apply, canBuyRelic, canEffect, canUseSandals, costFor, deserialize, freePowers, moveOptions, newGame, RULES, serialize, votes } from '../engine/game';
 import type { Answer, Command, FreePower, GameState, HouseType, Pending, Player, PlayerConfig } from '../engine/types';
@@ -106,8 +106,8 @@ function rulesHtml(): string {
     <ol class="how">
       <li>Vence quem chegar primeiro a <b>${RULES.goal} de Glória</b>. No início do turno a mão volta a 6 cartas.</li>
       <li>Cada turno tem <b>uma ação principal</b>: <b>mover</b> (descarta a carta e anda exatamente o movimento dela), <b>usar o efeito</b> de uma carta (paga o custo e não se move), ou <b>comprar a relíquia</b> do templo onde está.</li>
-      <li>Efeitos <b>universais</b> valem em qualquer casa; <b>elementais</b>, só em templo do elemento da carta; <b>divinos</b>, só no templo do deus indicado.</li>
-      <li>O <b>caminho importa</b>: cada casa atravessada aplica seu efeito de <b>passagem</b> (ganhar ou pagar Dracmas, fiscalização de Nêmesis) e a última aplica só o efeito de <b>parada</b>. Ao <b>chegar</b> a um templo por movimento, escolha: ação do templo, relíquia ou nada. Ficar parado no templo não repete a ação.</li>
+      <li>Efeitos <b>universais</b> valem em qualquer casa; <b>elementais</b>, só em templo do elemento da carta; <b>divinos</b>, só no templo do deus indicado. Cartas com <b>afinidade</b> também valem no templo afim.</li>
+      <li>O <b>caminho importa</b>: cada casa atravessada aplica seu efeito de <b>passagem</b> (ganhar ou pagar Dracmas, fiscalização de Nêmesis) e a última aplica só o efeito de <b>parada</b>. Ao <b>chegar</b> a um templo por movimento, escolha <b>uma</b> opção: ação principal, ação secundária, relíquia, efeito de uma carta permitida ali, ou nada. Ficar parado no templo não repete as ações.</li>
       <li>Ao parar em casa ocupada, você pode desafiar para um <b>duelo</b>: cada um aposta de 0 a 3 Favores em segredo.</li>
       <li>A cada ${RULES.electionEvery} rodadas há <b>eleição do Oráculo</b>: vence quem tiver mais Favor (o Favor não é gasto) e ganha 1 Glória.</li>
       <li><b>Húbris</b> é punida nas casas de Nêmesis, e quem encerra o turno com <b>${RULES.wrathHubris} ou mais</b> é condenado ao <b>Tártaro</b>, de onde se sai por Penitência, Suborno ou Pacto Sombrio.</li>
@@ -119,8 +119,8 @@ function rulesHtml(): string {
     </table>
     <h2>Templos e relíquias</h2>
     <table class="temples">
-      <tr><th>Deus</th><th>Casa</th><th>Ação do templo</th><th>Relíquia</th></tr>
-      ${GODS.map((g, r) => `<tr><td><b>${g.name}</b><br><small>${ELEMENT_NAME[g.element]}</small></td><td>${pad(r * 8 + 3)}</td><td>${g.action.label}<br><small>${g.action.cost === 0 ? 'Gratuito' : `${g.action.cost} ${g.action.res === 'favor' ? 'Favores' : 'Dracmas'}`}</small></td><td>${g.relic.name} <small>(${g.relic.price})</small><br><small>${g.relic.text}</small></td></tr>`).join('')}
+      <tr><th>Deus</th><th>Ação principal</th><th>Ação secundária</th><th>Relíquia</th><th>Cartas afins</th></tr>
+      ${GODS.map((g, r) => `<tr><td><b>${g.name}</b><br><small>Casa ${pad(r * 8 + 3)} · ${ELEMENT_NAME[g.element]}</small></td><td><b>${g.primary.name}</b><br><small>${g.primary.text}</small></td><td><b>${g.secondary.name}</b><br><small>${g.secondary.text}</small></td><td>${g.relic.name} <small>(${g.relic.price})</small><br><small>${g.relic.text}</small></td><td><small>${AFFINITY[r].map((c) => cardName(CARDS[c])).join(', ')}</small></td></tr>`).join('')}
     </table>`;
 }
 
@@ -180,6 +180,9 @@ function playersHtml(): string {
       game.oracle.holder === p.id ? '<span class="tag gold">Oráculo</span>' : '',
       p.jailed ? '<span class="tag red">Tártaro</span>' : '',
       p.shield ? '<span class="tag">Escudo</span>' : '',
+      p.duelBonus ? `<span class="tag">Duelo +${p.duelBonus}</span>` : '',
+      p.invest.forge ? `<span class="tag" title="Dracmas que a Forja ainda vai render">Forja ${p.invest.forge}</span>` : '',
+      p.invest.harvest ? `<span class="tag" title="Rodadas restantes da Colheita">Colheita ${p.invest.harvest}</span>` : '',
     ].join('');
     const relics = p.relics.map((r) => `<span class="relic" title="${GODS[r].relic.text}">${GODS[r].relic.name}</span>`).join('');
     return `
@@ -198,13 +201,18 @@ function playersHtml(): string {
   }).join('');
 }
 
+function affinityOf(id: number): string {
+  const temples = AFFINITY.map((list, r) => (list.includes(id) ? GODS[r].name : '')).filter((n) => n && n !== (CARDS[id].god === null ? '' : GODS[CARDS[id].god!].name));
+  return temples.length ? ` · afim: ${temples.join(', ')}` : '';
+}
+
 function cardHtml(id: number, viewer: Player, extra = '', cls = ''): string {
   const c = CARDS[id];
   const cost = costFor(viewer, c);
   return `
     <div class="card ${cls}" data-card="${id}">
       <div class="card-top"><span class="mv" title="Movimento">${c.move}</span><span class="rank">${cardName(c)}</span><span class="cost ${cost < c.cost ? 'discount' : ''}" title="Custo do efeito em Dracmas">${cost}</span></div>
-      <div class="card-use use-${c.use}">${useLabel(c)}</div>
+      <div class="card-use use-${c.use}">${useLabel(c)}${affinityOf(id)}</div>
       <div class="card-text">${c.text}</div>
       ${extra}
     </div>`;
@@ -242,7 +250,7 @@ function decisionHtml(pending: Pending, me: Player): string {
       body = '<p class="hint">Clique em uma das casas destacadas no mapa.</p>';
       break;
     case 'discard':
-      body = `<div class="cards">${pending.cards!.map((id) => cardHtml(id, me, '', `pickable ${picks.includes(id) ? 'selected' : ''}`)).join('')}</div><button id="confirm" class="primary" ${picks.length === pending.count ? '' : 'disabled'}>Descartar (${picks.length}/${pending.count})</button>`;
+      body = `<div class="cards">${pending.cards!.map((id) => cardHtml(id, me, '', `pickable ${picks.includes(id) ? 'selected' : ''}`)).join('')}</div><button id="confirm" class="primary" ${picks.length >= (pending.min ?? pending.count!) && picks.length <= pending.count! ? '' : 'disabled'}>Confirmar (${picks.length}/${pending.count})</button>`;
       break;
     case 'pickCard':
       body = `<div class="cards">${pending.cards!.map((id) => cardHtml(id, me, '', 'pickable')).join('')}</div>`;

@@ -64,7 +64,7 @@ export type Op =
   | { t: 'res'; p: number; res: Res; n: number; raw?: boolean }
   | { t: 'refill'; p: number }
   | { t: 'transfer'; from: number; to: number; res: Res; n: number }
-  | { t: 'target'; p: number; prompt: string; good?: boolean; ops: Op[] }
+  | { t: 'target'; p: number; prompt: string; good?: boolean; filter?: 'free' | 'rich3'; ops: Op[] }
   | { t: 'choice'; p: number; prompt: string; options: ChoiceOption[] }
   | { t: 'draw'; p: number; n: number }
   | { t: 'discard'; p: number; n: number }
@@ -73,7 +73,7 @@ export type Op =
   | { t: 'viewHand'; p: number; of: number }
   | { t: 'swap'; p: number; of: number }
   | { t: 'advance'; p: number; who: number; min: number; max: number }
-  | { t: 'teleport'; p: number; kind: 'common' | 'adjacent' }
+  | { t: 'teleport'; p: number; kind: 'common' | 'adjacent' | 'next' }
   | { t: 'jail'; p: number }
   | { t: 'release'; p: number }
   | { t: 'shield'; p: number }
@@ -88,8 +88,17 @@ export type Op =
   | { t: 'protect'; p: number }
   | { t: 'land'; p: number }
   | { t: 'encounter'; p: number }
-  | { t: 'duel'; a: number; d: number; bidA?: number; bidD?: number }
-  | { t: 'payTemple'; p: number; region: number }
+  | { t: 'duel'; a: number; d: number; stake?: 'gloria'; bidA?: number; bidD?: number }
+  | { t: 'zeusMark'; p: number }
+  | { t: 'templeRoll'; p: number; kind: 'artemis' | 'poseidon' }
+  | { t: 'dispute'; p: number; of: number }
+  | { t: 'cassino'; p: number; bet: number }
+  | { t: 'invest'; p: number; kind: 'forge' | 'harvest' }
+  | { t: 'newHand'; p: number }
+  | { t: 'swapUpTo'; p: number; n: number }
+  | { t: 'duelBonus'; p: number }
+  | { t: 'divineDiscount'; p: number }
+  | { t: 'playCard'; p: number; card: number }
   | { t: 'buy'; p: number; relic: number }
   | { t: 'altar'; p: number; bet: number }
   | { t: 'log'; p: number | null; text: string }
@@ -105,6 +114,8 @@ export interface Pending {
   options?: { label: string; disabled?: boolean }[];
   players?: number[];
   count?: number;
+  /** Em descartes: mínimo de cartas (padrão: exatamente `count`). */
+  min?: number;
   cards?: number[];
   deck?: 'minor' | 'destiny';
   nodes?: number[];
@@ -131,6 +142,14 @@ export interface Player {
   shield: boolean;
   discountNext: boolean;
   duelDone: boolean;
+  /** Dracmas que a Forja ainda vai render e rodadas restantes da Colheita. */
+  invest: { forge: number; harvest: number };
+  /** Força extra no próximo duelo (Preparação de Guerra). */
+  duelBonus: number;
+  /** Próxima carta divina custa −1 (Aprimoramento). */
+  divineDiscount: boolean;
+  /** Rodada do último uso da Ascensão de Zeus. */
+  gloryRound: number | null;
   /** Usos por rodada (ação de templo, relíquias, visão do Oráculo). */
   used: Record<string, number>;
 }

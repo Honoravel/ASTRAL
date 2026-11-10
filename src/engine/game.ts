@@ -1,14 +1,14 @@
 import { COMMON, NODES, reach, TARTARUS, templeOf } from './board';
 import { altarFavor, RULES, TABLES } from './config';
 import { cardName, CARDS, effectOps, T } from './cards';
-import { ELEMENT_SUIT, G, GODS, SIGNS, SUIT_ELEMENT } from './data';
+import { AFFINITY, ELEMENT_SUIT, G, GODS, SIGNS, SUIT_ELEMENT } from './data';
 import { DESTINIES } from './destiny';
 import { d6, rand, shuffle } from './rng';
 import type { Answer, Card, ChoiceOption, Command, EffectDefinition, FreePower, GameState, MovementResult, Op, Player, PlayerConfig, Res } from './types';
 
 export { RULES };
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 const RES_NAME: Record<Res, string> = { gloria: 'Glória', dracmas: 'Dracmas', favor: 'Favor', hubris: 'Húbris' };
 
 export function newGame(configs: PlayerConfig[], seed: number = Date.now() | 0): GameState {
@@ -19,6 +19,7 @@ export function newGame(configs: PlayerConfig[], seed: number = Date.now() | 0):
       pos: templeOf(SIGNS[c.sign].patron),
       gloria: 0, dracmas: RULES.startDracmas, favor: RULES.startFavor, hubris: 0,
       hand: [], relics: [], jailed: false, shield: false, discountNext: false, duelDone: false, used: {},
+      invest: { forge: 0, harvest: 0 }, duelBonus: 0, divineDiscount: false, gloryRound: null,
     })),
     current: 0,
     phase: 'RESOLVE_EFFECTS',
@@ -127,7 +128,7 @@ function firstBy(state: GameState, from: number, key: (p: Player) => number): Pl
 }
 
 /** Substitui o marcador de alvo pelo jogador escolhido. */
-function subst(ops: Op[], id: number): Op[] {
+export function subst(ops: Op[], id: number): Op[] {
   return JSON.parse(JSON.stringify(ops), (key, value) => (value === T && ['p', 'from', 'to', 'of', 'who', 'a', 'd'].includes(key) ? id : value));
 }
 
@@ -141,7 +142,7 @@ function martelo(p: Player, card: Card): boolean {
 export function costFor(p: Player, card: Card): number {
   let cost = card.cost;
   if (ELEMENT_SUIT[SIGNS[p.sign].element] === card.suit) cost--;
-  if (p.discountNext || martelo(p, card)) cost--;
+  if (p.discountNext || martelo(p, card) || (p.divineDiscount && card.use === 'D')) cost--;
   return Math.max(0, cost);
 }
 
@@ -150,6 +151,7 @@ export function placeAllows(p: Player, card: Card): boolean {
   if (card.use === 'U') return true;
   const node = NODES[p.pos];
   if (node.type !== 'templo') return false;
+  if (AFFINITY[node.region].includes(card.id)) return true;
   return card.use === 'D' ? node.region === card.god : GODS[node.region].element === SUIT_ELEMENT[card.suit];
 }
 
@@ -169,11 +171,6 @@ export const canUseSandals = (state: GameState): boolean => {
   const p = currentPlayer(state);
   return acting(state) && has(p, G.hermes) && !p.used.sandals;
 };
-
-function templeAffordable(p: Player, region: number): boolean {
-  const { cost, res } = GODS[region].action;
-  return !p.used.temple && p[res] >= cost;
-}
 
 function relicAffordable(state: GameState, p: Player, region: number): boolean {
   return state.stock[region] && p.dracmas >= GODS[region].relic.price;
@@ -205,23 +202,103 @@ export function votes(p: Player): number {
 
 // ---------- ações de templo e Destino ----------
 
-function templeActionOps(region: number, p: number): Op[] {
-  const g = (res: Res, n: number): Op => ({ t: 'res', p, res, n });
-  const effect: Op[][] = [
-    [g('gloria', 2)],
-    [g('favor', 2)],
-    [{ t: 'peek', p, deck: 'destiny', n: 3, reorder: false }],
-    [{ t: 'advance', p, who: p, min: 0, max: 3 }],
-    [{ t: 'draw', p, n: 2 }, { t: 'discard', p, n: 2 }],
-    [{ t: 'target', p, prompt: 'De quem roubar até 2 Dracmas?', ops: [{ t: 'transfer', from: T, to: p, res: 'dracmas', n: 2 }] }],
-    [{ t: 'shield', p }],
-    [g('gloria', 2), g('hubris', 1)],
-    [{ t: 'draw', p, n: 2 }, { t: 'discard', p, n: 1 }],
-    [g('dracmas', 4)],
-    [g('gloria', 2)],
-    [{ t: 'teleport', p, kind: 'adjacent' }],
-  ];
-  return [{ t: 'payTemple', p, region }, ...effect[region]];
+/** A Ascensão de Zeus só pode ser usada uma vez a cada `gloryActionCooldown` rodadas por jogador. */
+export const zeusReady = (state: GameState, p: Player): boolean => p.gloryRound === null || state.round - p.gloryRound >= RULES.gloryActionCooldown;
+
+/** Ações principal e secundária do templo (v1.8), com a disponibilidade para o jogador. */
+export function templeOptions(state: GameState, p: Player, region: number): ChoiceOption[] {
+  const id = p.id;
+  const { dracmas: D, favor: F } = p;
+  const g = (res: Res, n: number): Op => ({ t: 'res', p: id, res, n });
+  const opt = (label: string, ok: boolean, ops: Op[]): ChoiceOption => ({
+    label, disabled: !ok,
+    ops: [{ t: 'log', p: id, text: `${p.name} no Templo de ${GODS[region].name}: ${label.split(':')[0]}.` }, ...ops],
+  });
+  const foes = others(state, id).map((f) => state.players[f]);
+  const reorder: Op = { t: 'peek', p: id, deck: 'destiny', n: 3, reorder: true };
+  switch (region) {
+    case G.zeus: {
+      const wait = zeusReady(state, p) ? '' : ` (disponível na rodada ${p.gloryRound! + RULES.gloryActionCooldown})`;
+      return [
+        opt(`Ascensão: 6 Dracmas → +2 Glórias, +1 Húbris${wait}`, D >= 6 && zeusReady(state, p), [g('dracmas', -6), g('gloria', 2), g('hubris', 1), { t: 'zeusMark', p: id }]),
+        opt('Decreto Olímpico: 3 Favores → +1 Glória', F >= 3, [g('favor', -3), g('gloria', 1)]),
+      ];
+    }
+    case G.hera:
+      return [
+        opt('Influência: 2 Favores → 4 Dracmas', F >= 2, [g('favor', -2), g('dracmas', 4)]),
+        opt('Influência: 5 Dracmas → 2 Favores', D >= 5, [g('dracmas', -5), g('favor', 2)]),
+        opt('Proteção Real: 2 Favores → escudo contra perda de Glória', F >= 2, [g('favor', -2), { t: 'shield', p: id }]),
+      ];
+    case G.apolo:
+      return [
+        opt('Visão Profética: 2 Dracmas → reorganizar 3 cartas do Destino', D >= 2, [g('dracmas', -2), reorder]),
+        opt('Purificação: 3 Dracmas → −2 Húbris', D >= 3, [g('dracmas', -3), g('hubris', -2)]),
+      ];
+    case G.artemis:
+      return [
+        opt('Caçada: 1d6, +1 a 5 Dracmas (resultado 1: +1 Húbris)', true, [{ t: 'templeRoll', p: id, kind: 'artemis' }]),
+        opt('Caça Sagrada: 2 Dracmas → comprar 2 cartas e descartar 2', D >= 2, [g('dracmas', -2), { t: 'draw', p: id, n: 2 }, { t: 'discard', p: id, n: 2 }]),
+      ];
+    case G.atena:
+      return [
+        opt('Julgamento: 3 Dracmas → disputar 2 Favores de um adversário (falha: +1 Húbris)', D >= 3, [g('dracmas', -3), { t: 'target', p: id, prompt: 'Disputar Favores de quem?', ops: [{ t: 'dispute', p: id, of: T }] }]),
+        opt('Estratégia: 2 Favores → reorganizar 3 cartas do Destino', F >= 2, [g('favor', -2), reorder]),
+      ];
+    case G.ares:
+      return [
+        opt('Confronto: 2 Dracmas e 1 Favor → duelo à distância por 1 Glória', D >= 2 && F >= 1 && !p.duelDone && foes.some((f) => !f.jailed),
+          [g('dracmas', -2), g('favor', -1), { t: 'target', p: id, prompt: 'Desafiar quem?', filter: 'free', ops: [{ t: 'duel', a: id, d: T, stake: 'gloria' }] }]),
+        opt(`Preparação de Guerra: 2 Dracmas → +${RULES.duelPrep} de força no próximo duelo`, D >= 2, [g('dracmas', -2), { t: 'duelBonus', p: id }]),
+      ];
+    case G.hefesto:
+      return [
+        opt(`Forja: ${RULES.forgeCost} Dracmas → +1 Dracma por rodada até render ${RULES.forgeTotal}`, D >= RULES.forgeCost && p.invest.forge === 0, [g('dracmas', -RULES.forgeCost), { t: 'invest', p: id, kind: 'forge' }]),
+        opt('Aprimoramento: 3 Dracmas → próxima carta divina custa −1', D >= 3 && !p.divineDiscount, [g('dracmas', -3), { t: 'divineDiscount', p: id }]),
+      ];
+    case G.dionisio:
+      return [
+        opt('Êxtase: +5 Dracmas, +2 Húbris e mão nova de 6 cartas', true, [g('dracmas', 5), g('hubris', 2), { t: 'newHand', p: id }]),
+        opt('Cassino Divino: apostar 1–3 Dracmas para tentar dobrar', D >= 1, [{
+          t: 'choice', p: id, prompt: 'Cassino Divino: quanto apostar? (4, 5 ou 6 no dado dobram)',
+          options: [1, 2, 3].map((bet) => ({ label: `${bet} Dracma${bet > 1 ? 's' : ''}`, disabled: D < bet, ops: [{ t: 'cassino', p: id, bet } as Op] })),
+        }]),
+      ];
+    case G.hermes:
+      return [
+        opt('Comércio: vender 1 Glória por 5 Dracmas', p.gloria >= 1, [{ t: 'res', p: id, res: 'gloria', n: -1, raw: true }, g('dracmas', 5)]),
+        opt('Comércio: 3 Dracmas → 1 Favor', D >= 3, [g('dracmas', -3), g('favor', 1)]),
+        opt('Contrabando: 2 Dracmas → trocar até 3 cartas da mão', D >= 2 && p.hand.length > 0, [g('dracmas', -2), { t: 'swapUpTo', p: id, n: 3 }]),
+      ];
+    case G.demeter:
+      return [
+        opt(`Colheita: ${RULES.harvestCost} Dracmas → +${RULES.harvestYield} Dracmas por rodada durante ${RULES.harvestRounds} rodadas`, D >= RULES.harvestCost && p.invest.harvest === 0, [g('dracmas', -RULES.harvestCost), { t: 'invest', p: id, kind: 'harvest' }]),
+        opt('Oferta da Terra: 3 Dracmas → +2 Favores', D >= 3, [g('dracmas', -3), g('favor', 2)]),
+      ];
+    case G.afrodite:
+      return [
+        opt('Persuasão: 3 Dracmas → +2 Favores', D >= 3, [g('dracmas', -3), g('favor', 2)]),
+        opt('Encantamento: 2 Favores → tomar 3 Dracmas de um adversário', F >= 2 && foes.some((f) => f.dracmas >= 3),
+          [g('favor', -2), { t: 'target', p: id, prompt: 'Encantar quem?', filter: 'rich3', ops: [{ t: 'transfer', from: T, to: id, res: 'dracmas', n: 3 }] }]),
+      ];
+    default:
+      return [
+        opt('Tesouro Submerso: 1d6, +2 a 7 Dracmas (resultado 1: +1 Húbris)', true, [{ t: 'templeRoll', p: id, kind: 'poseidon' }]),
+        opt('Travessia: 3 Dracmas → teletransporte para casa comum da região seguinte', D >= 3, [g('dracmas', -3), { t: 'teleport', p: id, kind: 'next' }]),
+      ];
+  }
+}
+
+/** Paga o custo, descarta a carta e devolve os passos do efeito. */
+function playEffect(state: GameState, p: Player, cardId: number): Op[] {
+  const card = CARDS[cardId];
+  change(p, 'dracmas', -costFor(p, card));
+  if (martelo(p, card)) p.used.martelo = 1;
+  else if (p.divineDiscount && card.use === 'D') p.divineDiscount = false;
+  else p.discountNext = false;
+  discardCard(state, p, cardId);
+  say(state, p.id, `${p.name} joga ${cardName(card)}: ${card.text}`);
+  return effectOps(cardId, p.id);
 }
 
 /** Jogadores prejudicados pessoalmente pelo Arcano (para a Proteção do Destino do Oráculo). */
@@ -390,14 +467,16 @@ function land(state: GameState, p: Player): Op[] {
         ops.push(...judgement(state, p));
         break;
       case 'temple': {
+        // Uma ação por visita: principal, secundária, relíquia ou efeito de carta permitido no templo.
         const god = GODS[node.region];
-        const cost = god.action.cost === 0 ? 'grátis' : `${god.action.cost} ${god.action.res === 'favor' ? 'Favores' : 'Dracmas'}`;
+        const cards = p.hand.filter((c) => (CARDS[c].use !== 'U' || AFFINITY[node.region].includes(c)) && placeAllows(p, CARDS[c]));
         const options: ChoiceOption[] = [
-          { label: `${god.action.label} (${cost})`, ops: templeActionOps(node.region, id), disabled: !templeAffordable(p, node.region) },
+          ...templeOptions(state, p, node.region),
           { label: `Comprar ${god.relic.name} (${god.relic.price} Dracmas)`, ops: [{ t: 'buy', p: id, relic: node.region }], disabled: !relicAffordable(state, p, node.region) },
+          ...cards.map((c) => ({ label: `Jogar ${cardName(CARDS[c])} (${costFor(p, CARDS[c])} Dracmas): ${CARDS[c].text}`, ops: [{ t: 'playCard', p: id, card: c } as Op], disabled: p.dracmas < costFor(p, CARDS[c]) })),
           { label: 'Nenhuma ação', ops: [] },
         ];
-        if (!(options[0].disabled && options[1].disabled)) ops.push({ t: 'choice', p: id, prompt: `Templo de ${god.name}`, options });
+        if (options.some((o, i) => i < options.length - 1 && !o.disabled)) ops.push({ t: 'choice', p: id, prompt: `Templo de ${god.name}`, options });
         break;
       }
       case 'delphi':
@@ -451,6 +530,14 @@ function roundEnd(state: GameState): void {
   for (const p of state.players) {
     p.used = {};
     if (has(p, G.demeter)) change(p, 'dracmas', 1);
+    if (p.invest.forge > 0) {
+      p.invest.forge--;
+      change(p, 'dracmas', 1);
+    }
+    if (p.invest.harvest > 0) {
+      p.invest.harvest--;
+      change(p, 'dracmas', RULES.harvestYield);
+    }
     if (cinto && has(p, G.afrodite)) change(p, 'favor', 1);
   }
 }
@@ -498,7 +585,8 @@ function exec(state: GameState, op: Op): Op[] | null {
       return [];
     }
     case 'target': {
-      const list = others(state, op.p);
+      const list = others(state, op.p).filter((id) => (op.filter === 'free' ? !P(id).jailed : op.filter === 'rich3' ? P(id).dracmas >= 3 : true));
+      if (list.length === 0) return [];
       if (list.length === 1) return subst(op.ops, list[0]);
       if (!state.answer) {
         state.pending = { player: op.p, kind: 'target', prompt: op.prompt, players: list };
@@ -598,6 +686,8 @@ function exec(state: GameState, op: Op): Op[] | null {
         const set = new Set<number>();
         for (let k = op.min; k <= op.max; k++) for (const n of k === 0 ? [who.pos] : reach(who.pos, k).keys()) set.add(n);
         nodes = [...set];
+      } else if (op.kind === 'next') {
+        nodes = COMMON.filter((n) => NODES[n].region === (NODES[who.pos].region + 1) % 12);
       } else if (op.kind === 'common') {
         nodes = COMMON.filter((n) => n !== who.pos);
       } else {
@@ -722,21 +812,97 @@ function exec(state: GameState, op: Op): Op[] | null {
       state.stats.duels++;
       change(a, 'favor', -op.bidA!);
       change(d, 'favor', -op.bidD!);
-      const fa = op.bidA! + (has(a, G.ares) ? 1 : 0);
-      const fd = op.bidD! + (has(d, G.ares) ? 1 : 0);
+      const fa = op.bidA! + (has(a, G.ares) ? 1 : 0) + a.duelBonus;
+      const fd = op.bidD! + (has(d, G.ares) ? 1 : 0) + d.duelBonus;
+      a.duelBonus = d.duelBonus = 0;
       let result = 'Empate: o defensor resiste, sem prêmio.';
-      if (fa > fd) result = `${a.name} vence e toma ${change(a, 'dracmas', -change(d, 'dracmas', -2))} Dracmas.`;
+      if (fa > fd && op.stake === 'gloria') {
+        if (d.gloria > 0 && !gloryBlocked(state, d)) {
+          change(d, 'gloria', -1);
+          change(a, 'gloria', 1);
+          result = `${a.name} vence e toma 1 Glória.`;
+        } else {
+          result = `${a.name} vence, mas não há Glória a tomar.`;
+        }
+      } else if (fa > fd) result = `${a.name} vence e toma ${change(a, 'dracmas', -change(d, 'dracmas', -2))} Dracmas.`;
       else if (fd > fa) result = `${d.name} vence e recebe ${change(d, 'favor', -change(a, 'favor', -1))} Favor.`;
       say(state, a.id, `Duelo: ${a.name} (força ${fa}) × ${d.name} (força ${fd}). ${result}`);
       return [];
     }
-    case 'payTemple': {
-      const p = P(op.p);
-      const god = GODS[op.region];
-      change(p, god.action.res, -god.action.cost);
-      p.used.temple = 1;
-      say(state, p.id, `${p.name} usa o Templo de ${god.name}: ${god.action.label.toLowerCase()}.`);
+    case 'zeusMark':
+      P(op.p).gloryRound = state.round;
       return [];
+    case 'templeRoll': {
+      const p = P(op.p);
+      const roll = d6(state);
+      const gain = op.kind === 'artemis' ? Math.min(roll, 5) : roll + 1;
+      change(p, 'dracmas', gain);
+      if (roll === 1) change(p, 'hubris', 1);
+      say(state, p.id, `${p.name} tira ${roll}: +${gain} Dracma${gain > 1 ? 's' : ''}${roll === 1 ? ' e +1 Húbris' : ''}.`);
+      return [];
+    }
+    case 'dispute': {
+      const p = P(op.p);
+      const of = P(op.of);
+      const mine = d6(state);
+      const theirs = d6(state);
+      if (mine > theirs) {
+        const taken = -change(of, 'favor', -2);
+        change(p, 'favor', taken);
+        say(state, p.id, `Julgamento: ${p.name} ${mine} × ${theirs} ${of.name}. ${p.name} toma ${taken} Favor${taken === 1 ? '' : 'es'}.`);
+      } else {
+        change(p, 'hubris', 1);
+        say(state, p.id, `Julgamento: ${p.name} ${mine} × ${theirs} ${of.name}. ${p.name} falha e ganha 1 Húbris.`);
+      }
+      return [];
+    }
+    case 'cassino': {
+      const p = P(op.p);
+      const bet = -change(p, 'dracmas', -op.bet);
+      const roll = d6(state);
+      if (roll >= 4) change(p, 'dracmas', bet * 2);
+      say(state, p.id, `Cassino Divino: ${p.name} aposta ${bet} e tira ${roll}: ${roll >= 4 ? `recebe ${bet * 2} Dracmas` : 'perde a aposta'}.`);
+      return [];
+    }
+    case 'invest': {
+      const p = P(op.p);
+      if (op.kind === 'forge') p.invest.forge = RULES.forgeTotal;
+      else p.invest.harvest = RULES.harvestRounds;
+      return [];
+    }
+    case 'newHand': {
+      const p = P(op.p);
+      state.discard.push(...p.hand);
+      p.hand = [];
+      drawCards(state, p, RULES.hand);
+      return [];
+    }
+    case 'swapUpTo': {
+      const p = P(op.p);
+      const max = Math.min(op.n, p.hand.length);
+      if (max === 0) return [];
+      if (!state.answer) {
+        state.pending = { player: p.id, kind: 'discard', prompt: `Escolha até ${max} cartas para trocar`, count: max, min: 0, cards: [...p.hand] };
+        return null;
+      }
+      const a = take(state);
+      const picked = Array.isArray(a) ? [...new Set(a)].filter((c) => p.hand.includes(c)).slice(0, max) : [];
+      for (const c of picked) discardCard(state, p, c);
+      drawCards(state, p, picked.length);
+      say(state, p.id, `${p.name} troca ${picked.length} carta${picked.length === 1 ? '' : 's'}.`);
+      return [];
+    }
+    case 'duelBonus':
+      P(op.p).duelBonus = RULES.duelPrep;
+      return [];
+    case 'divineDiscount':
+      P(op.p).divineDiscount = true;
+      return [];
+    case 'playCard': {
+      const p = P(op.p);
+      const card = CARDS[op.card];
+      if (!p.hand.includes(op.card) || !placeAllows(p, card) || p.dracmas < costFor(p, card)) return [];
+      return playEffect(state, p, op.card);
     }
     case 'buy': {
       const p = P(op.p);
@@ -835,13 +1001,7 @@ export function apply(state: GameState, cmd: Command): void {
     }
     case 'PLAY_CARD_EFFECT': {
       if (!canEffect(state, cmd.card)) throw new Error('O efeito desta carta não pode ser usado agora.');
-      const card = CARDS[cmd.card];
-      change(p, 'dracmas', -costFor(p, card));
-      if (martelo(p, card)) p.used.martelo = 1;
-      else p.discountNext = false;
-      discardCard(state, p, cmd.card);
-      say(state, p.id, `${p.name} joga ${cardName(card)}: ${card.text}`);
-      state.queue = [...effectOps(cmd.card, p.id), { t: 'endTurn' }];
+      state.queue = [...playEffect(state, p, cmd.card), { t: 'endTurn' }];
       break;
     }
     case 'BUY_RELIC':
@@ -894,6 +1054,18 @@ export function deserialize(json: string): GameState {
     // v1 → v2 (regras v1.6): as casas mudaram de efeito, mas IDs e ligações são os mesmos.
     state.lastMove = null;
     state.version = 2;
+  }
+  if (state.version === 2) {
+    // v2 → v3 (templos v1.8): novos campos de jogador; decisões de templo antigas são descartadas.
+    for (const p of state.players) Object.assign(p, { invest: { forge: 0, harvest: 0 }, duelBonus: 0, divineDiscount: false, gloryRound: null });
+    const old = (op: Op): boolean => JSON.stringify(op).includes('"payTemple"');
+    if (state.queue.some(old)) {
+      state.queue = state.queue.filter((op) => !old(op));
+      state.pending = null;
+      state.answer = null;
+    }
+    state.version = 3;
+    if (!state.pending && state.queue.length > 0) run(state);
   }
   if (state.version !== SAVE_VERSION) throw new Error(`Versão de partida salva incompatível: ${state.version}.`);
   return state;

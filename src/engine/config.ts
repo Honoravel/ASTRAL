@@ -29,6 +29,14 @@ export const RULES = {
   wrathHubris: 6,
   /** …e a queda expia parte da soberba: a Húbris cai para este valor. */
   wrathReset: 4,
+  // Templos (v1.8)
+  gloryActionCooldown: 3,
+  forgeCost: 5,
+  forgeTotal: 8,
+  harvestCost: 4,
+  harvestRounds: 4,
+  harvestYield: 2,
+  duelPrep: 2,
 };
 
 export type RollRow = { text: string; changes: [Res, number][] };

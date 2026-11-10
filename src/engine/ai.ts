@@ -1,7 +1,8 @@
 import { DIST, NODES, templeOf } from './board';
 import { CARDS } from './cards';
 import { GODS } from './data';
-import { apply, canBuyRelic, canEffect, costFor, currentPlayer, freePowers, moveOptions, others, placeAllows } from './game';
+import { apply, canBuyRelic, canEffect, costFor, currentPlayer, freePowers, moveOptions, others, placeAllows, subst } from './game';
+import { RULES } from './config';
 import { rand, shuffle } from './rng';
 import type { Answer, Command, GameState, Op, Player, Res } from './types';
 
@@ -39,8 +40,18 @@ function opsValue(state: GameState, me: number, ops: Op[]): number {
       case 'shield': v += 2; break;
       case 'peek': v += 0.3; break;
       case 'advance': case 'teleport': v += 1; break;
-      case 'duel': v += state.players[me].favor >= 2 && state.players[op.d].dracmas >= 2 ? 1.5 : -1; break;
-      case 'target': v += opsValue(state, me, op.ops.map((o) => JSON.parse(JSON.stringify(o).replace(/-1/g, String(others(state, me)[0]))))); break;
+      case 'duel': v += op.stake === 'gloria' ? (state.players[me].favor >= 3 ? 5 : -2) : state.players[me].favor >= 2 && state.players[op.d].dracmas >= 2 ? 1.5 : -1; break;
+      case 'target': v += opsValue(state, me, subst(op.ops, others(state, me)[0])); break;
+      case 'choice': v += Math.max(0, ...op.options.filter((o) => !o.disabled).map((o) => opsValue(state, me, o.ops))); break;
+      case 'templeRoll': v += op.kind === 'artemis' ? 3 : 4.2; break;
+      case 'dispute': v += Math.min(state.players[op.of].favor, 2) * 1.2 - 1.2; break;
+      case 'cassino': v += 0; break;
+      case 'invest': v += op.kind === 'forge' ? RULES.forgeTotal * 0.8 : RULES.harvestRounds * RULES.harvestYield * 0.8; break;
+      case 'newHand': v += 0.5; break;
+      case 'swapUpTo': v += 0.8; break;
+      case 'duelBonus': v += state.players[me].duelBonus ? 0 : 1; break;
+      case 'divineDiscount': v += 0.8; break;
+      case 'playCard': v += CARDS[op.card].cost * 2.6 + 2 - costFor(state.players[me], CARDS[op.card]); break;
       default: break;
     }
   }
@@ -77,7 +88,7 @@ export function autoAnswer(state: GameState): Answer {
       return list.reduce((a, b) => (key(b) > key(a) ? b : a)).id;
     }
     case 'discard':
-      return [...pending.cards!].sort((a, b) => keepValue(me, a) - keepValue(me, b)).slice(0, pending.count);
+      return [...pending.cards!].sort((a, b) => keepValue(me, a) - keepValue(me, b)).slice(0, pending.min === 0 ? Math.min(2, pending.count!) : pending.count);
     case 'pickCard':
       return [...pending.cards!].sort((a, b) => keepValue(me, a) - keepValue(me, b))[0];
     case 'reorder':

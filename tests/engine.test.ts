@@ -248,12 +248,15 @@ describe('turno e casas', () => {
     const g = game();
     const p = g.players[0];
     Object.assign(p, { pos: templeOf(G.dionisio), dracmas: 10 });
+    g.players[1].pos = 0; // o patrono do segundo jogador é Dionísio; tira-o do templo para não haver encontro
     expect(() => apply(g, { type: 'TEMPLE_ACTION' } as never)).toThrow();
     expect(p.gloria).toBe(0);
     stepTo(g, templeOf(G.dionisio) - 1);
     expect(g.pending?.prompt).toBe('Templo de Dionísio');
-    apply(g, { type: 'ANSWER', value: 0 });
-    expect(p).toMatchObject({ gloria: 2, hubris: 1 });
+    apply(g, { type: 'ANSWER', value: 0 }); // Êxtase
+    expect(p).toMatchObject({ dracmas: 15, hubris: 2 });
+    expect(p.hand).toHaveLength(RULES.hand);
+    expect(g.current).toBe(1);
   });
 
   it('condenação ao Tártaro encerra o turno sem quebrar o estado', () => {
@@ -394,6 +397,142 @@ describe('Oráculo, relíquias e duelos', () => {
   });
 });
 
+describe('templos v1.8', () => {
+  /** Chega ao templo da região com 1 passo e devolve os rótulos das opções. */
+  const arrive = (g: GameState, region: number): string[] => {
+    stepTo(g, templeOf(region) - 1);
+    expect(g.pending?.prompt).toBe(`Templo de ${GODS[region].name}`);
+    return g.pending!.options!.map((o) => o.label);
+  };
+  const rich = (g: GameState, extra = {}): void => g.players.forEach((p) => Object.assign(p, { dracmas: 20, favor: 5, ...extra }));
+
+  it('oferece ação principal, secundária, relíquia e nada, uma por visita', () => {
+    const g = game();
+    rich(g);
+    g.players[0].hand = [0, 1, 2, 3, 5, 16]; // só cartas universais sem afinidade com Afrodite
+    const labels = arrive(g, G.afrodite);
+    expect(labels).toHaveLength(4);
+    expect(labels[0]).toMatch(/^Persuasão/);
+    expect(labels[1]).toMatch(/^Encantamento/);
+    apply(g, { type: 'ANSWER', value: 0 });
+    expect(g.players[0]).toMatchObject({ dracmas: 17, favor: 7 });
+    expect(g.current).toBe(1);
+  });
+
+  it('limita a Ascensão de Zeus a uma vez a cada três rodadas', () => {
+    const g = game();
+    rich(g);
+    arrive(g, G.zeus);
+    apply(g, { type: 'ANSWER', value: 0 });
+    expect(g.players[0]).toMatchObject({ gloria: 2, hubris: 1, dracmas: 14, gloryRound: 1 });
+    g.current = 0;
+    g.round = 3;
+    arrive(g, G.zeus);
+    expect(g.pending!.options![0].disabled).toBe(true);
+    expect(g.pending!.options![1].disabled).toBe(false); // Decreto Olímpico não tem o limite
+    apply(g, { type: 'ANSWER', value: 3 });
+    g.current = 0;
+    g.round = 4;
+    arrive(g, G.zeus);
+    expect(g.pending!.options![0].disabled).toBe(false);
+  });
+
+  it('paga Forja e Colheita ao fim das rodadas, com um investimento ativo de cada', () => {
+    const g = game();
+    rich(g);
+    arrive(g, G.hefesto);
+    apply(g, { type: 'ANSWER', value: 0 });
+    const p = g.players[0];
+    expect(p).toMatchObject({ dracmas: 15, invest: { forge: RULES.forgeTotal, harvest: 0 } });
+    apply(g, { type: 'END_TURN' }); // fecha a rodada 1
+    expect(p.dracmas).toBe(16);
+    expect(p.invest.forge).toBe(RULES.forgeTotal - 1);
+    arrive(g, G.hefesto);
+    expect(g.pending!.options![0].disabled).toBe(true);
+    apply(g, { type: 'ANSWER', value: g.pending!.options!.length - 1 });
+    apply(g, { type: 'END_TURN' });
+
+    arrive(g, G.demeter);
+    apply(g, { type: 'ANSWER', value: 0 });
+    const before = p.dracmas;
+    for (let i = 0; i < 6; i++) {
+      apply(g, { type: 'END_TURN' });
+      apply(g, { type: 'END_TURN' });
+    }
+    expect(p.invest.harvest).toBe(0);
+    expect(p.dracmas - before).toBe(RULES.harvestRounds * RULES.harvestYield + 6);
+  });
+
+  it('Confronto de Ares duela à distância por 1 Glória e respeita escudo e limite de duelo', () => {
+    const fight = (shield: boolean) => {
+      const g = game();
+      rich(g, { gloria: 3 });
+      g.players[1].shield = shield;
+      g.players[1].pos = 80;
+      arrive(g, G.ares);
+      apply(g, { type: 'ANSWER', value: 0 });
+      expect(g.pending).toMatchObject({ kind: 'bid', player: 0 });
+      apply(g, { type: 'ANSWER', value: 3 });
+      apply(g, { type: 'ANSWER', value: 0 });
+      return g.players;
+    };
+    let [a, d] = fight(false);
+    expect([a.gloria, d.gloria, a.duelDone]).toEqual([4, 2, true]);
+    expect(a).toMatchObject({ dracmas: 18, favor: 1 });
+    [a, d] = fight(true);
+    expect([a.gloria, d.gloria, d.shield]).toEqual([3, 3, false]);
+  });
+
+  it('Preparação de Guerra soma força ao próximo duelo e é consumida', () => {
+    const g = game();
+    rich(g);
+    arrive(g, G.ares);
+    apply(g, { type: 'ANSWER', value: 1 });
+    expect(g.players[0].duelBonus).toBe(RULES.duelPrep);
+    apply(g, { type: 'END_TURN' });
+    g.players[1].pos = 2;
+    stepTo(g, 1);
+    apply(g, { type: 'ANSWER', value: 0 });
+    apply(g, { type: 'ANSWER', value: 0 });
+    apply(g, { type: 'ANSWER', value: 1 });
+    expect(g.players[0].duelBonus).toBe(0);
+    expect(g.players[0].dracmas).toBe(20); // 20 − 2 da preparação + 2 do duelo vencido com força 2 × 1
+  });
+
+  it('permite jogar carta com afinidade no templo afim, na chegada ou como ação', () => {
+    const g = game();
+    rich(g);
+    const p = g.players[0];
+    p.hand = [0, 26, 1, 2, 3, 5]; // Rainha de Copas: divina de Afrodite, afim de Hera
+    const labels = arrive(g, G.hera);
+    const at = labels.findIndex((l) => l.startsWith('Jogar Rainha de Copas'));
+    expect(at).toBeGreaterThan(0);
+    apply(g, { type: 'ANSWER', value: at });
+    expect(p).toMatchObject({ gloria: 2, favor: 7, dracmas: 16 });
+    expect(p.hand).not.toContain(26);
+
+    const h = game();
+    rich(h);
+    Object.assign(h.players[0], { pos: templeOf(G.zeus), hand: [26, 0, 1, 2, 3, 5] });
+    expect(() => apply(h, { type: 'PLAY_CARD_EFFECT', card: 26 })).toThrow();
+  });
+
+  it('resolve todas as ações de todos os templos sem quebrar o turno', () => {
+    for (let region = 0; region < 12; region++) {
+      for (let option = 0; option < 3; option++) {
+        const g = game(3, region * 7 + option);
+        rich(g, { gloria: 2, hubris: 1 });
+        const labels = arrive(g, region);
+        if (g.pending!.options![option].disabled || option >= labels.length - 1) continue;
+        apply(g, { type: 'ANSWER', value: option });
+        settle(g);
+        expect(g.current, labels[option]).toBe(1);
+        for (const q of g.players) for (const v of [q.gloria, q.dracmas, q.favor, q.hubris]) expect(v).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+});
+
 describe('propriedades', () => {
   it('é determinística por semente, mantém recursos não negativos e termina', () => {
     const play = (seed: number) => {
@@ -426,9 +565,11 @@ describe('propriedades', () => {
     const old = JSON.parse(serialize(g));
     old.version = 1;
     delete old.lastMove;
+    for (const q of old.players) for (const k of ['invest', 'duelBonus', 'divineDiscount', 'gloryRound']) delete q[k];
     const migrated = deserialize(JSON.stringify(old));
-    expect(migrated.version).toBe(2);
+    expect(migrated.version).toBe(3);
     expect(migrated.lastMove).toBeNull();
+    expect(migrated.players[0]).toMatchObject({ invest: { forge: 0, harvest: 0 }, duelBonus: 0, gloryRound: null });
     stepTo(migrated, 0);
     expect(migrated.players[0].dracmas).toBe(RULES.startDracmas + 2);
   });
