@@ -1,146 +1,129 @@
-import { ELEMENT_SUIT, SIGNS } from './signs';
-import type { Card, Effect, Res, Who } from './types';
+import { GODS, G } from './data';
+import type { Card, Op, Res, Suit } from './types';
 
-const self = (res: Res, n: number): Effect => ({ t: 'self', res, n });
-const foes = (who: Who, res: Res, n: number): Effect => ({ t: 'foes', who, res, n });
-const steal = (who: Who, res: 'dracmas' | 'favor', n: number): Effect => ({ t: 'steal', who, res, n });
-const draw = (n: number): Effect => ({ t: 'draw', n });
-const jail = (who: 'leader' | 'richest'): Effect => ({ t: 'jail', who });
+export const SUITS: Suit[] = ['Paus', 'Copas', 'Espadas', 'Ouros'];
+export const RANKS = ['Ás', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Pajem', 'Cavaleiro', 'Rainha', 'Rei'];
+const MOVES = [1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 2, 5, 3, 6];
+const COSTS = [0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 2, 3, 4, 5];
+/** Deuses das cartas divinas (Cavaleiro, Rainha, Rei) de cada naipe. */
+const DIVINE: number[][] = [
+  [G.ares, G.hefesto, G.zeus],
+  [G.poseidon, G.afrodite, G.dionisio],
+  [G.hermes, G.atena, G.apolo],
+  [G.artemis, G.demeter, G.hera],
+];
 
-type Row = [rank: string, title: string, move: number, cost: number, effects: Effect[]];
-
-/** Quatro Arcanos Menores por deus, na ordem das regiões (ver SIGNS). */
-const BY_SECTOR: Row[][] = [
-  // Atena — Paus
+const TEXTS: string[][] = [
   [
-    ['Ás', 'Estratégia', 1, 2, [self('gloria', 1), draw(1)]],
-    ['4', 'Égide', 4, 3, [self('hubris', -2), self('favor', 1)]],
-    ['7', 'Sabedoria', 3, 5, [self('gloria', 2), self('hubris', 1)]],
-    ['10', 'Vitória de Palas', 6, 8, [self('gloria', 4), self('hubris', 2)]],
+    'Ganhe 1 Glória.', 'Ganhe 2 Dracmas e 1 Húbris.', 'Transfira até 1 Dracma de um adversário para você.', 'Ganhe 2 Glórias e 1 Húbris.',
+    'Um adversário perde até 1 Favor; você ganha 1 Húbris.', 'Ganhe 3 Dracmas e 1 Húbris.', 'Ganhe 3 Glórias e 2 Húbris.',
+    'Ganhe 2 Glórias; adversário perde até 1 Glória.', 'Ganhe 2 Glórias; com 3+ Húbris, ganhe mais 1.', 'Ganhe 4 Glórias e 2 Húbris.',
+    'Remova 1 Húbris ou ganhe 1 Dracma.', 'Roube até 3 Dracmas; ganhe 1 Húbris.', 'Ganhe 2 Glórias e um escudo para a próxima perda de Glória.', 'Ganhe 5 Glórias e 2 Húbris.',
   ],
-  // Afrodite — Ouros
   [
-    ['Ás', 'Encanto', 1, 1, [self('favor', 2)]],
-    ['4', 'Cinto Dourado', 4, 3, [steal('all', 'favor', 1)]],
-    ['7', 'Paixão', 3, 5, [self('gloria', 2), self('favor', 1), self('hubris', 1)]],
-    ['10', 'Pomo de Ouro', 6, 7, [self('gloria', 3), foes('all', 'hubris', 1)]],
+    'Ganhe 1 Favor.', 'Remova 1 Húbris.', 'Ganhe 2 Dracmas.', 'Ganhe 2 Favores.', 'Remova até 2 Húbris.', 'Ganhe 1 Favor e 1 Dracma.', 'Ganhe 3 Favores.',
+    'Remova até 3 Húbris e ganhe 1 Favor.', 'Ganhe 2 Favores e 1 Glória.', 'Ganhe 2 Glórias e remova até 2 Húbris.', 'Compre 1 carta e descarte 1.',
+    'Mova um adversário até 3 casas adiante, sem ativar o destino.', 'Ganhe 2 Favores e 2 Glórias.', 'Ganhe 4 Glórias e 2 Húbris; remova 1 Húbris.',
   ],
-  // Apolo — Espadas
   [
-    ['Ás', 'Profecia', 1, 2, [draw(3)]],
-    ['4', 'Lira', 4, 3, [self('gloria', 1), self('favor', 1)]],
-    ['7', 'Flecha da Peste', 3, 5, [self('gloria', 1), foes('all', 'dracmas', -2), self('hubris', 1)]],
-    ['10', 'Carro do Sol', 6, 8, [self('gloria', 4), self('hubris', 2)]],
+    'Olhe 2 cartas do baralho de jogadores e reorganize.', 'Compre 1 carta e descarte 1.', 'Ganhe 1 Favor.', 'Veja a mão de um adversário.',
+    'Troque 1 carta sua por 1 aleatória de um adversário.', 'Olhe 3 cartas do Destino e reorganize.', 'Compre 2 cartas e descarte 2.',
+    'Ganhe 2 Glórias se estiver atrás do líder; caso contrário, 1.', 'Olhe 4 cartas do Destino e reorganize.', 'Ganhe 2 Glórias e 1 Favor.',
+    'Sua próxima carta de efeito custa −1 Dracma.', 'Teletransporte-se para qualquer casa comum.', 'Ganhe 2 Glórias; compre 2 cartas e descarte 2.', 'Ganhe 3 Glórias e veja 3 cartas do Destino.',
   ],
-  // Hermes — Copas
   [
-    ['Ás', 'Furto', 1, 0, [steal('richest', 'dracmas', 3), self('hubris', 1)]],
-    ['4', 'Sandálias Aladas', 4, 2, [draw(2), self('favor', 1)]],
-    ['7', 'Comércio', 3, 4, [self('gloria', 2)]],
-    ['10', 'Mensageiro dos Deuses', 6, 6, [self('gloria', 3), draw(1)]],
-  ],
-  // Zeus — Paus
-  [
-    ['2', 'Trovão', 2, 3, [foes('leader', 'gloria', -1), self('hubris', 1)]],
-    ['5', 'Águia Real', 5, 4, [self('gloria', 2), self('hubris', 1)]],
-    ['8', 'Raio', 4, 6, [jail('leader'), self('hubris', 2)]],
-    ['Rainha', 'Trono do Olimpo', 6, 9, [self('gloria', 5), self('hubris', 3)]],
-  ],
-  // Deméter — Ouros
-  [
-    ['2', 'Colheita', 2, 0, [self('dracmas', 4)]],
-    ['5', 'Abundância', 5, 2, [self('dracmas', 7)]],
-    ['8', 'Mistérios de Elêusis', 4, 5, [self('gloria', 2), self('hubris', -1)]],
-    ['Rainha', 'Estações', 6, 7, [self('gloria', 3), self('dracmas', 3), self('hubris', 1)]],
-  ],
-  // Hefesto — Espadas
-  [
-    ['2', 'Forja', 2, 1, [self('dracmas', 3), self('favor', 1)]],
-    ['5', 'Autômato', 5, 4, [self('gloria', 2)]],
-    ['8', 'Rede de Bronze', 4, 5, [jail('richest'), self('hubris', 1)]],
-    ['Rainha', 'Obra-Prima', 6, 8, [self('gloria', 4), self('hubris', 1)]],
-  ],
-  // Ares — Copas
-  [
-    ['2', 'Saque', 2, 2, [steal('all', 'dracmas', 2), self('hubris', 1)]],
-    ['5', 'Fúria', 5, 4, [self('gloria', 2), self('hubris', 2)]],
-    ['8', 'Cerco', 4, 5, [foes('all', 'gloria', -1), self('hubris', 2)]],
-    ['Rainha', 'Triunfo', 6, 7, [self('gloria', 4), self('hubris', 3)]],
-  ],
-  // Ártemis — Paus
-  [
-    ['3', 'Caçada', 3, 2, [steal('richest', 'dracmas', 2)]],
-    ['6', 'Lua Crescente', 6, 3, [self('gloria', 1), self('favor', 1)]],
-    ['9', 'Flecha Certeira', 5, 5, [self('gloria', 1), foes('leader', 'gloria', -1), self('hubris', 1)]],
-    ['Rei', 'Senhora das Feras', 2, 7, [self('gloria', 3), self('hubris', 1)]],
-  ],
-  // Héstia — Ouros
-  [
-    ['3', 'Lareira', 3, 1, [self('hubris', -3)]],
-    ['6', 'Chama Sagrada', 6, 3, [self('gloria', 1), self('hubris', -1)]],
-    ['9', 'Hospitalidade', 5, 4, [self('favor', 2), draw(2)]],
-    ['Rei', 'Fogo Eterno', 1, 6, [self('gloria', 3)]],
-  ],
-  // Hera — Espadas
-  [
-    ['3', 'Ciúme', 3, 3, [foes('leader', 'hubris', 2)]],
-    ['6', 'Pavão', 6, 4, [self('gloria', 1), self('favor', 2)]],
-    ['9', 'Vingança', 5, 5, [foes('leader', 'gloria', -1), foes('leader', 'dracmas', -3), self('hubris', 1)]],
-    ['Rei', 'Rainha dos Deuses', 2, 8, [self('gloria', 4), self('hubris', 2)]],
-  ],
-  // Poseidon — Copas
-  [
-    ['3', 'Maré', 3, 2, [self('gloria', 1), foes('all', 'dracmas', -1)]],
-    ['6', 'Tridente', 6, 4, [self('gloria', 2), self('hubris', 1)]],
-    ['9', 'Terremoto', 5, 6, [foes('all', 'dracmas', -3), foes('leader', 'gloria', -1), self('hubris', 2)]],
-    ['Rei', 'Senhor dos Mares', 2, 8, [self('gloria', 4), self('hubris', 2)]],
+    'Ganhe 2 Dracmas.', 'Ganhe 3 Dracmas.', 'Ganhe 1 Dracma e 1 Favor.', 'Ganhe 4 Dracmas.', 'Ganhe 3 Dracmas e remova 1 Húbris.', 'Ganhe 5 Dracmas.', 'Ganhe 6 Dracmas.',
+    'Ganhe 4 Dracmas e 1 Favor.', 'Ganhe 2 Glórias e 3 Dracmas.', 'Ganhe 7 Dracmas.', 'Ganhe 2 Dracmas; compre 1 carta e descarte 1.',
+    'Ganhe 2 Glórias; teletransporte-se até 2 casas adiante.', 'Ganhe 6 Dracmas e 2 Glórias.', 'Ganhe 3 Glórias e 2 Favores; remova 1 Húbris.',
   ],
 ];
 
-export const CARDS: Card[] = BY_SECTOR.flatMap((rows, sector) =>
-  rows.map(([rank, title, move, cost, effects], i) => ({
-    id: sector * 4 + i,
-    sector,
-    suit: ELEMENT_SUIT[SIGNS[sector].element],
+export const CARDS: Card[] = SUITS.flatMap((suit, s) =>
+  RANKS.map((rank, r) => ({
+    id: s * 14 + r,
+    suit,
     rank,
-    title,
-    move,
-    cost,
-    effects,
+    move: MOVES[r],
+    cost: COSTS[r],
+    use: r < 6 ? ('U' as const) : r < 11 ? ('E' as const) : ('D' as const),
+    god: r >= 11 ? DIVINE[s][r - 11] : null,
+    text: TEXTS[s][r],
   })),
 );
 
-export const RES_NAME: Record<Res, string> = {
-  gloria: 'Glória',
-  dracmas: 'dracmas',
-  favor: 'Favor',
-  hubris: 'Húbris',
-};
+export const cardName = (card: Card): string => `${card.rank} de ${card.suit}`;
+export const useLabel = (card: Card): string =>
+  card.use === 'U' ? 'Universal' : card.use === 'E' ? 'Elemental' : `Divina: ${GODS[card.god!].name}`;
 
-const WHO_NAME: Record<Who, string> = {
-  all: 'Cada adversário',
-  leader: 'O adversário com mais Glória',
-  richest: 'O adversário mais rico',
-};
+/** Marcador do alvo escolhido dentro das operações de um `target`. */
+export const T = -1;
 
-const signed = (n: number): string => (n > 0 ? `+${n}` : `−${-n}`);
-
-export function describeEffect(e: Effect): string {
-  switch (e.t) {
-    case 'self':
-      return `${signed(e.n)} ${RES_NAME[e.res]}`;
-    case 'foes':
-      return `${WHO_NAME[e.who]}: ${signed(e.n)} ${RES_NAME[e.res]}`;
-    case 'steal':
-      return e.who === 'all'
-        ? `Roube ${e.n} ${RES_NAME[e.res]} de cada adversário`
-        : `Roube ${e.n} ${RES_NAME[e.res]} do adversário ${e.who === 'leader' ? 'com mais Glória' : 'mais rico'}`;
-    case 'draw':
-      return `Compre ${e.n} carta${e.n > 1 ? 's' : ''}`;
-    case 'jail':
-      return `Mande ao Tártaro o adversário ${e.who === 'leader' ? 'com mais Glória' : 'mais rico'}`;
+/** Operações do efeito de cada Arcano Menor para o jogador `p`. */
+export function effectOps(cardId: number, p: number): Op[] {
+  const g = (res: Res, n: number): Op => ({ t: 'res', p, res, n });
+  const foe = (prompt: string, ops: Op[]): Op => ({ t: 'target', p, prompt, ops });
+  const cycle = (n: number, m: number): Op[] => [{ t: 'draw', p, n }, { t: 'discard', p, n: m }];
+  switch (cardId) {
+    // Paus
+    case 0: return [g('gloria', 1)];
+    case 1: return [g('dracmas', 2), g('hubris', 1)];
+    case 2: return [foe('De quem transferir 1 Dracma?', [{ t: 'transfer', from: T, to: p, res: 'dracmas', n: 1 }])];
+    case 3: return [g('gloria', 2), g('hubris', 1)];
+    case 4: return [foe('Quem perde 1 Favor?', [{ t: 'res', p: T, res: 'favor', n: -1 }]), g('hubris', 1)];
+    case 5: return [g('dracmas', 3), g('hubris', 1)];
+    case 6: return [g('gloria', 3), g('hubris', 2)];
+    case 7: return [g('gloria', 2), foe('Quem perde 1 Glória?', [{ t: 'res', p: T, res: 'gloria', n: -1 }])];
+    case 8: return [{ t: 'paus9', p }];
+    case 9: return [g('gloria', 4), g('hubris', 2)];
+    case 10: return [{ t: 'choice', p, prompt: 'Pajem de Paus', options: [{ label: 'Remover 1 Húbris', ops: [g('hubris', -1)] }, { label: 'Ganhar 1 Dracma', ops: [g('dracmas', 1)] }] }];
+    case 11: return [foe('De quem roubar até 3 Dracmas?', [{ t: 'transfer', from: T, to: p, res: 'dracmas', n: 3 }]), g('hubris', 1)];
+    case 12: return [g('gloria', 2), { t: 'shield', p }];
+    case 13: return [g('gloria', 5), g('hubris', 2)];
+    // Copas
+    case 14: return [g('favor', 1)];
+    case 15: return [g('hubris', -1)];
+    case 16: return [g('dracmas', 2)];
+    case 17: return [g('favor', 2)];
+    case 18: return [g('hubris', -2)];
+    case 19: return [g('favor', 1), g('dracmas', 1)];
+    case 20: return [g('favor', 3)];
+    case 21: return [g('hubris', -3), g('favor', 1)];
+    case 22: return [g('favor', 2), g('gloria', 1)];
+    case 23: return [g('gloria', 2), g('hubris', -2)];
+    case 24: return cycle(1, 1);
+    case 25: return [foe('Qual adversário mover?', [{ t: 'advance', p, who: T, min: 1, max: 3 }])];
+    case 26: return [g('favor', 2), g('gloria', 2)];
+    case 27: return [g('gloria', 4), g('hubris', 2), g('hubris', -1)];
+    // Espadas
+    case 28: return [{ t: 'peek', p, deck: 'minor', n: 2, reorder: true }];
+    case 29: return cycle(1, 1);
+    case 30: return [g('favor', 1)];
+    case 31: return [foe('Ver a mão de quem?', [{ t: 'viewHand', p, of: T }])];
+    case 32: return [foe('Trocar carta com quem?', [{ t: 'swap', p, of: T }])];
+    case 33: return [{ t: 'peek', p, deck: 'destiny', n: 3, reorder: true }];
+    case 34: return cycle(2, 2);
+    case 35: return [{ t: 'behind', p }];
+    case 36: return [{ t: 'peek', p, deck: 'destiny', n: 4, reorder: true }];
+    case 37: return [g('gloria', 2), g('favor', 1)];
+    case 38: return [{ t: 'discountNext', p }];
+    case 39: return [{ t: 'teleport', p, kind: 'common' }];
+    case 40: return [g('gloria', 2), ...cycle(2, 2)];
+    case 41: return [g('gloria', 3), { t: 'peek', p, deck: 'destiny', n: 3, reorder: false }];
+    // Ouros
+    case 42: return [g('dracmas', 2)];
+    case 43: return [g('dracmas', 3)];
+    case 44: return [g('dracmas', 1), g('favor', 1)];
+    case 45: return [g('dracmas', 4)];
+    case 46: return [g('dracmas', 3), g('hubris', -1)];
+    case 47: return [g('dracmas', 5)];
+    case 48: return [g('dracmas', 6)];
+    case 49: return [g('dracmas', 4), g('favor', 1)];
+    case 50: return [g('gloria', 2), g('dracmas', 3)];
+    case 51: return [g('dracmas', 7)];
+    case 52: return [g('dracmas', 2), ...cycle(1, 1)];
+    case 53: return [g('gloria', 2), { t: 'advance', p, who: p, min: 0, max: 2 }];
+    case 54: return [g('dracmas', 6), g('gloria', 2)];
+    case 55: return [g('gloria', 3), g('favor', 2), g('hubris', -1)];
+    default: throw new Error(`Carta desconhecida: ${cardId}`);
   }
 }
-
-export const cardText = (card: Card): string => card.effects.map(describeEffect).join(' · ');
-export const cardName = (card: Card): string => `${card.rank} de ${card.suit}`;

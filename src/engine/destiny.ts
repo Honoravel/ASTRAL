@@ -1,34 +1,33 @@
-import type { Destiny, DestinyOp, DestinyTarget, Res } from './types';
+export interface Destiny {
+  id: number;
+  numeral: string;
+  name: string;
+  text: string;
+}
 
-const res = (to: DestinyTarget, r: Res, n: number): DestinyOp => ({ t: 'res', to, res: r, n });
-const draw = (to: DestinyTarget, n: number): DestinyOp => ({ t: 'draw', to, n });
-
-type Row = [numeral: string, name: string, text: string, ops: DestinyOp[]];
-
-/** Os 22 Arcanos Maiores: o baralho do Destino, revelado nas casas das Moiras. */
-const ROWS: Row[] = [
-  ['0', 'O Louco', 'Quem revelou: +1 Glória e +2 Húbris.', [res('active', 'gloria', 1), res('active', 'hubris', 2)]],
-  ['I', 'O Mago', 'Quem revelou compra 2 cartas.', [draw('active', 2)]],
-  ['II', 'A Sacerdotisa', 'Todos: −1 Húbris.', [res('all', 'hubris', -1)]],
-  ['III', 'A Imperatriz', 'Todos: +2 dracmas.', [res('all', 'dracmas', 2)]],
-  ['IV', 'O Imperador', 'Quem tem mais Glória paga 3 dracmas de imposto.', [res('leader', 'dracmas', -3)]],
-  ['V', 'O Hierofante', 'Todos: +1 Favor.', [res('all', 'favor', 1)]],
-  ['VI', 'Os Enamorados', 'Quem revelou: +2 Favor.', [res('active', 'favor', 2)]],
-  ['VII', 'O Carro', 'Quem revelou: +2 dracmas e compra 1 carta.', [res('active', 'dracmas', 2), draw('active', 1)]],
-  ['VIII', 'A Justiça', 'Quem tiver 3 ou mais de Húbris perde 3 dracmas.', [{ t: 'justice' }]],
-  ['IX', 'O Eremita', 'Quem tem menos Glória: +3 dracmas e +1 Favor.', [res('last', 'dracmas', 3), res('last', 'favor', 1)]],
-  ['X', 'A Roda da Fortuna', 'Todos descartam a mão e compram 6 cartas.', [{ t: 'redraw' }]],
-  ['XI', 'A Força', 'Quem tem menos Glória: +1 Glória.', [res('last', 'gloria', 1)]],
-  ['XII', 'O Enforcado', 'Quem revelou: −2 dracmas e +1 Favor.', [res('active', 'dracmas', -2), res('active', 'favor', 1)]],
-  ['XIII', 'A Morte', 'Quem tem mais Glória: −1 Glória.', [res('leader', 'gloria', -1)]],
-  ['XIV', 'A Temperança', 'Todos: −2 Húbris.', [res('all', 'hubris', -2)]],
-  ['XV', 'O Diabo', 'Todos: +1 Húbris.', [res('all', 'hubris', 1)]],
-  ['XVI', 'A Torre', 'Todos: −3 dracmas.', [res('all', 'dracmas', -3)]],
-  ['XVII', 'A Estrela', 'Quem revelou: +1 Glória.', [res('active', 'gloria', 1)]],
-  ['XVIII', 'A Lua', 'Os demais jogadores: +1 Húbris.', [res('others', 'hubris', 1)]],
-  ['XIX', 'O Sol', 'Todos: +3 dracmas.', [res('all', 'dracmas', 3)]],
-  ['XX', 'O Julgamento', 'Quem tiver mais Húbris (ao menos 1) vai para o Tártaro.', [{ t: 'judgement' }]],
-  ['XXI', 'O Mundo', 'Todos: +1 Favor. Quem tem menos Glória: +1 Glória.', [res('all', 'favor', 1), res('last', 'gloria', 1)]],
+const ROWS: [string, string, string][] = [
+  ['0', 'O Louco', 'Todos compram 1 carta e descartam 1.'],
+  ['I', 'O Mago', 'Ativo ganha 2 Dracmas e 1 Favor.'],
+  ['II', 'A Sacerdotisa', 'Ativo olha as 3 próximas cartas do Destino e reorganiza.'],
+  ['III', 'A Imperatriz', 'Todos ganham 3 Dracmas.'],
+  ['IV', 'O Imperador', 'Líder em Glória ganha 1 Húbris; demais ganham 1 Dracma.'],
+  ['V', 'O Hierofante', 'Todos removem 1 Húbris.'],
+  ['VI', 'Os Enamorados', 'Ativo escolhe outro; ambos ganham 1 Favor.'],
+  ['VII', 'O Carro', 'Ativo avança 3 casas sem ativar o destino.'],
+  ['VIII', 'A Justiça', 'Jogadores com 3+ Húbris perdem até 2 Dracmas.'],
+  ['IX', 'O Eremita', 'Ativo compra 2 cartas e descarta 2.'],
+  ['X', 'A Roda da Fortuna', 'Todos descartam as mãos e compram 6.'],
+  ['XI', 'A Força', 'Ativo ganha 2 Glórias e 1 Húbris.'],
+  ['XII', 'O Enforcado', 'Ativo perde 1 Favor; sem Favor, perde até 2 Dracmas.'],
+  ['XIII', 'A Morte', 'Todos descartam 1 carta aleatória, se tiverem.'],
+  ['XIV', 'A Temperança', 'Todos removem até 2 Húbris.'],
+  ['XV', 'O Diabo', 'Ativo ganha 5 Dracmas e 2 Húbris.'],
+  ['XVI', 'A Torre', 'Todos perdem até 3 Dracmas.'],
+  ['XVII', 'A Estrela', 'Jogador com menos Glória ganha 2 Glórias.'],
+  ['XVIII', 'A Lua', 'Todos revelam 1 carta aleatória; ativo ganha 1 Favor.'],
+  ['XIX', 'O Sol', 'Todos ganham 1 Glória.'],
+  ['XX', 'O Julgamento', 'Jogadores com 4+ Húbris vão ao Tártaro.'],
+  ['XXI', 'O Mundo', 'Ativo ganha 3 Glórias e 1 Favor.'],
 ];
 
-export const DESTINIES: Destiny[] = ROWS.map(([numeral, name, text, ops], id) => ({ id, numeral, name, text, ops }));
+export const DESTINIES: Destiny[] = ROWS.map(([numeral, name, text], id) => ({ id, numeral, name, text }));

@@ -1,77 +1,71 @@
-import { gateId, IRIS, NODES, reachable, templeId } from './board';
-import { cardName, CARDS } from './cards';
+import { COMMON, NODES, reach, TARTARUS, templeOf } from './board';
+import { cardName, CARDS, effectOps, T } from './cards';
+import { ELEMENT_SUIT, G, GODS, SIGNS, SUIT_ELEMENT } from './data';
 import { DESTINIES } from './destiny';
-import { d6, shuffle } from './rng';
-import { ELEMENT_SUIT, SIGNS } from './signs';
-import type { Card, DestinyTarget, Effect, GameState, Player, PlayerConfig, Res, Who } from './types';
+import { d6, rand, shuffle } from './rng';
+import type { Answer, Card, ChoiceOption, Command, FreePower, GameState, Op, Player, PlayerConfig, Res } from './types';
 
+/** Parâmetros iniciais, sujeitos a testes de balanceamento. */
 export const RULES = {
+  goal: 20,
   hand: 6,
-  maxHand: 9,
-  goal: 15,
   startDracmas: 5,
-  offering: 3,
-  tribute: 2,
+  startFavor: 1,
+  maxRelics: 2,
+  electionEvery: 6,
   bail: 4,
-  nemesisSentence: 2,
-  cardSentence: 1,
-  absolution: 2,
-  duelStake: 2,
+  nemesisFine: 4,
+  houseDracmas: 2,
+  houseFavor: 1,
+  houseGloria: 1,
+  maxBid: 3,
 };
+
+export const SAVE_VERSION = 1;
+const RES_NAME: Record<Res, string> = { gloria: 'Glória', dracmas: 'Dracmas', favor: 'Favor', hubris: 'Húbris' };
 
 export function newGame(configs: PlayerConfig[], seed: number = Date.now() | 0): GameState {
   const state: GameState = {
+    version: SAVE_VERSION,
     players: configs.map((c, id) => ({
-      id,
-      name: c.name,
-      sign: c.sign,
-      isAI: c.isAI,
-      pos: templeId(c.sign),
-      gloria: 0,
-      dracmas: RULES.startDracmas,
-      favor: 0,
-      hubris: 0,
-      hand: [],
-      jail: 0,
+      id, name: c.name, sign: c.sign, isAI: c.isAI,
+      pos: templeOf(SIGNS[c.sign].patron),
+      gloria: 0, dracmas: RULES.startDracmas, favor: RULES.startFavor, hubris: 0,
+      hand: [], relics: [], jailed: false, shield: false, discountNext: false, duelDone: false, used: {},
     })),
     current: 0,
-    phase: 'move',
+    phase: 'RESOLVE_EFFECTS',
     round: 1,
-    deck: [],
-    discard: [],
-    destiny: [],
-    destinyDiscard: [],
-    lastDestiny: null,
-    log: [],
-    winner: null,
-    seed,
-    goal: RULES.goal,
+    deck: [], discard: [], destiny: [], destinyDiscard: [], lastDestiny: null,
+    stock: GODS.map(() => true),
+    oracle: { holder: null, weaveUsed: false, protectUsed: false },
+    queue: [], pending: null, answer: null,
+    log: [], winner: null, seed, goal: RULES.goal,
+    stats: { duels: 0, jails: configs.map(() => 0) },
   };
   state.deck = shuffle(state, CARDS.map((c) => c.id));
   state.destiny = shuffle(state, DESTINIES.map((d) => d.id));
   for (const p of state.players) drawCards(state, p, RULES.hand);
-  say(state, null, 'A disputa pela ascensão ao Olimpo começa.');
+  say(state, null, 'Os mortais partem dos templos de seus patronos. A disputa pela ascensão começa.');
+  state.queue = [{ t: 'turnStart', p: 0 }];
+  run(state);
   return state;
 }
 
-export const currentPlayer = (state: GameState): Player => state.players[state.current];
+// ---------- utilitários ----------
 
-function say(state: GameState, player: Player | null, text: string): void {
-  state.log.push({ player: player ? player.id : null, text });
+export const currentPlayer = (state: GameState): Player => state.players[state.current];
+export const has = (p: Player, relic: number): boolean => p.relics.includes(relic);
+
+function say(state: GameState, player: number | null, text: string): void {
+  state.log.push({ player, text });
+  if (state.log.length > 400) state.log.splice(0, state.log.length - 400);
 }
 
-function drawCards(state: GameState, p: Player, n: number): number {
-  let drawn = 0;
-  for (let i = 0; i < n && p.hand.length < RULES.maxHand; i++) {
-    if (state.deck.length === 0) {
-      if (state.discard.length === 0) break;
-      state.deck = shuffle(state, state.discard);
-      state.discard = [];
-    }
-    p.hand.push(state.deck.pop()!);
-    drawn++;
-  }
-  return drawn;
+/** Demais jogadores, na ordem do turno a partir de `id`. */
+export function others(state: GameState, id: number): number[] {
+  const n = state.players.length;
+  return Array.from({ length: n - 1 }, (_, i) => (id + 1 + i) % n);
 }
 
 /** Altera um recurso sem deixá-lo negativo; devolve a variação real. */
@@ -81,310 +75,771 @@ function change(p: Player, res: Res, n: number): number {
   return p[res] - before;
 }
 
-function sendToTartarus(state: GameState, p: Player, turns: number): void {
-  p.jail = Math.max(p.jail, turns);
-  say(state, p, `${p.name} é lançado ao Tártaro por ${turns} turno${turns > 1 ? 's' : ''}.`);
-}
-
-function opponents(state: GameState, p: Player): Player[] {
-  const n = state.players.length;
-  const list: Player[] = [];
-  for (let i = 1; i < n; i++) list.push(state.players[(p.id + i) % n]);
-  return list;
-}
-
-function pickMax(players: Player[], key: (p: Player) => number): Player | null {
-  let best: Player | null = null;
-  for (const p of players) if (!best || key(p) > key(best)) best = p;
-  return best;
-}
-
-export function targets(state: GameState, p: Player, who: Who): Player[] {
-  const foes = opponents(state, p);
-  if (who === 'all') return foes;
-  const one = pickMax(foes, (f) => (who === 'leader' ? f.gloria : f.dracmas));
-  return one ? [one] : [];
-}
-
-/** Custo da carta para o jogador: o naipe do seu elemento custa 1 a menos. */
-export function costFor(p: Player, card: Card): number {
-  const discount = card.suit === ELEMENT_SUIT[SIGNS[p.sign].element] ? 1 : 0;
-  return Math.max(0, card.cost - discount);
-}
-
-export function canPlay(state: GameState, p: Player, cardId: number): boolean {
-  const card = CARDS[cardId];
-  const node = NODES[p.pos];
-  return state.phase === 'action' && node.type === 'templo' && node.sector === card.sector && p.dracmas >= costFor(p, card);
-}
-
-export const playableCards = (state: GameState): number[] => {
-  const p = currentPlayer(state);
-  return p.hand.filter((id) => canPlay(state, p, id));
-};
-
-/** Destinos possíveis ao mover com a carta (exatamente o valor de movimento). */
-export function moveOptions(state: GameState, cardId: number): Map<number, number[]> {
-  return reachable(currentPlayer(state).pos, CARDS[cardId].move);
-}
-
-function applyEffect(state: GameState, p: Player, e: Effect): void {
-  switch (e.t) {
-    case 'self':
-      change(p, e.res, e.n);
-      break;
-    case 'foes':
-      for (const f of targets(state, p, e.who)) change(f, e.res, e.n);
-      break;
-    case 'steal':
-      for (const f of targets(state, p, e.who)) change(p, e.res, -change(f, e.res, -e.n));
-      break;
-    case 'draw':
-      drawCards(state, p, e.n);
-      break;
-    case 'jail':
-      for (const f of targets(state, p, e.who)) sendToTartarus(state, f, RULES.cardSentence);
-      break;
-  }
-}
-
-function destinyTargets(state: GameState, active: Player, to: DestinyTarget): Player[] {
-  const all = [active, ...opponents(state, active)];
-  switch (to) {
-    case 'active':
-      return [active];
-    case 'all':
-      return all;
-    case 'others':
-      return opponents(state, active);
-    case 'leader':
-      return [pickMax(all, (p) => p.gloria)!];
-    case 'last':
-      return [pickMax([...all].reverse(), (p) => -p.gloria)!];
-  }
-}
-
-function revealDestiny(state: GameState, active: Player): void {
-  if (state.destiny.length === 0) {
-    state.destiny = shuffle(state, state.destinyDiscard);
+/** Garante `n` cartas no baralho, reembaralhando o descarte por baixo se preciso. */
+function ensure(state: GameState, which: 'minor' | 'destiny', n: number): void {
+  if (which === 'minor' && state.deck.length < n && state.discard.length > 0) {
+    state.deck = [...shuffle(state, state.discard), ...state.deck];
+    state.discard = [];
+  } else if (which === 'destiny' && state.destiny.length < n && state.destinyDiscard.length > 0) {
+    state.destiny = [...shuffle(state, state.destinyDiscard), ...state.destiny];
     state.destinyDiscard = [];
   }
-  const destiny = DESTINIES[state.destiny.pop()!];
-  state.destinyDiscard.push(destiny.id);
-  state.lastDestiny = destiny.id;
-  say(state, active, `As Moiras revelam ${destiny.numeral} · ${destiny.name}: ${destiny.text}`);
-  for (const op of destiny.ops) {
-    switch (op.t) {
-      case 'res':
-        for (const p of destinyTargets(state, active, op.to)) change(p, op.res, op.n);
-        break;
-      case 'draw':
-        for (const p of destinyTargets(state, active, op.to)) drawCards(state, p, op.n);
-        break;
-      case 'redraw':
-        for (const p of state.players) {
-          state.discard.push(...p.hand);
-          p.hand = [];
-        }
-        for (const p of state.players) drawCards(state, p, RULES.hand);
-        break;
-      case 'justice':
-        for (const p of state.players) if (p.hubris >= 3) change(p, 'dracmas', -3);
-        break;
-      case 'judgement': {
-        const top = Math.max(...state.players.map((p) => p.hubris));
-        if (top >= 1) {
-          for (const p of state.players) {
-            if (p.hubris === top && p.jail === 0) sendToTartarus(state, p, RULES.nemesisSentence);
-          }
-        }
-        break;
-      }
-    }
+}
+
+function drawCards(state: GameState, p: Player, n: number): void {
+  for (let i = 0; i < n; i++) {
+    ensure(state, 'minor', 1);
+    if (state.deck.length === 0) return;
+    p.hand.push(state.deck.pop()!);
   }
 }
 
-function land(state: GameState, p: Player): void {
-  const node = NODES[p.pos];
-  switch (node.type) {
-    case 'templo':
-      if (node.sector === p.sign) {
-        change(p, 'favor', 1);
-        say(state, p, `${SIGNS[p.sign].god} acolhe ${p.name}: +1 Favor.`);
-      }
-      break;
-    case 'oferenda':
-      change(p, 'dracmas', RULES.offering);
-      say(state, p, `Oferenda: ${p.name} recebe ${RULES.offering} dracmas.`);
-      break;
-    case 'tributo': {
-      const paid = -change(p, 'dracmas', -RULES.tribute);
-      if (paid < RULES.tribute) {
-        change(p, 'hubris', 1);
-        say(state, p, `Tributo: ${p.name} não consegue pagar e ganha 1 Húbris.`);
-      } else {
-        say(state, p, `Tributo: ${p.name} paga ${RULES.tribute} dracmas.`);
-      }
-      break;
-    }
-    case 'nemesis': {
-      if (p.hubris === 0) {
-        say(state, p, `Nêmesis nada tem contra ${p.name}.`);
-        break;
-      }
-      const roll = d6(state);
-      if (roll > p.hubris) {
-        say(state, p, `Nêmesis julga ${p.name}: dado ${roll} contra Húbris ${p.hubris}. Inocente.`);
-      } else if (p.favor >= RULES.absolution) {
-        change(p, 'favor', -RULES.absolution);
-        say(state, p, `Nêmesis condena ${p.name} (dado ${roll}), mas ${RULES.absolution} de Favor compram a absolvição.`);
-      } else {
-        say(state, p, `Nêmesis condena ${p.name}: dado ${roll} contra Húbris ${p.hubris}.`);
-        change(p, 'hubris', -3);
-        sendToTartarus(state, p, RULES.nemesisSentence);
-      }
-      break;
-    }
-    case 'moiras':
-      revealDestiny(state, p);
-      break;
-    case 'fortuna': {
-      const roll = d6(state);
-      const outcomes: [Res, number][] = [['hubris', 1], ['dracmas', -2], ['dracmas', 2], ['dracmas', 3], ['favor', 1], ['gloria', 1]];
-      const [res, n] = outcomes[roll - 1];
-      change(p, res, n);
-      const label = { gloria: 'Glória', dracmas: 'dracmas', favor: 'Favor', hubris: 'Húbris' }[res];
-      say(state, p, `Fortuna: ${p.name} tira ${roll}: ${n > 0 ? '+' : '−'}${Math.abs(n)} ${label}.`);
-      break;
-    }
-    case 'visao': {
-      const n = drawCards(state, p, 2);
-      say(state, p, `Visão: ${p.name} compra ${n} carta${n === 1 ? '' : 's'}.`);
-      break;
-    }
-    case 'purificacao':
-      say(state, p, `Purificação: ${p.name} perde ${-change(p, 'hubris', -2)} de Húbris.`);
-      break;
-    case 'tentacao':
-      change(p, 'gloria', 1);
-      change(p, 'hubris', 2);
-      say(state, p, `Tentação: ${p.name} prova a ambrosia: +1 Glória, +2 Húbris.`);
-      break;
-    case 'iris': {
-      const other = IRIS.find((id) => id !== p.pos);
-      if (other !== undefined) {
-        p.pos = other;
-        say(state, p, `${p.name} atravessa a Ponte de Íris até a região de ${SIGNS[NODES[other].sector].god}.`);
-      }
-      break;
-    }
-    case 'duelo': {
-      const foe = pickMax(opponents(state, p).filter((f) => f.jail === 0), (f) => f.dracmas);
-      if (!foe) break;
-      const mine = d6(state);
-      const theirs = d6(state);
-      if (mine === theirs) {
-        say(state, p, `Duelo: ${p.name} ${mine} × ${theirs} ${foe.name}. Empate.`);
-      } else {
-        const [winner, loser] = mine > theirs ? [p, foe] : [foe, p];
-        const taken = -change(loser, 'dracmas', -RULES.duelStake);
-        change(winner, 'dracmas', taken);
-        say(state, p, `Duelo: ${p.name} ${mine} × ${theirs} ${foe.name}. ${winner.name} toma ${taken} dracmas.`);
-      }
-      break;
-    }
+function discardCard(state: GameState, p: Player, cardId: number): void {
+  const at = p.hand.indexOf(cardId);
+  if (at >= 0) {
+    p.hand.splice(at, 1);
+    state.discard.push(cardId);
   }
 }
 
-function checkWinner(state: GameState): boolean {
-  const active = currentPlayer(state);
-  const order = [active, ...opponents(state, active)];
-  const best = pickMax(order, (p) => p.gloria)!;
-  if (best.gloria < state.goal) return false;
-  state.winner = best.id;
-  state.phase = 'over';
-  say(state, best, `${best.name} alcança ${best.gloria} de Glória e ascende ao Olimpo!`);
+function jail(state: GameState, p: Player): void {
+  if (p.jailed) return;
+  p.jailed = true;
+  p.pos = TARTARUS;
+  state.stats.jails[p.id]++;
+  say(state, p.id, `${p.name} é lançado ao Tártaro.`);
+}
+
+/** Égide de Atena (1 vez/rodada) ou escudo absorvem uma perda de Glória. */
+function gloryBlocked(state: GameState, p: Player): boolean {
+  if (has(p, G.atena) && !p.used.egide) {
+    p.used.egide = 1;
+    say(state, p.id, `A Égide de Atena protege a Glória de ${p.name}.`);
+    return true;
+  }
+  if (p.shield) {
+    p.shield = false;
+    say(state, p.id, `O escudo de ${p.name} absorve a perda de Glória.`);
+    return true;
+  }
+  return false;
+}
+
+function arco(state: GameState, p: Player): boolean {
+  if (!has(p, G.artemis) || p.used.arco) return false;
+  p.used.arco = 1;
+  say(state, p.id, `O Arco de Ártemis livra ${p.name} do efeito negativo da casa.`);
   return true;
 }
 
-function endTurn(state: GameState): void {
-  if (checkWinner(state)) return;
-  const p = currentPlayer(state);
-  drawCards(state, p, Math.max(0, RULES.hand - p.hand.length));
-  state.current = (state.current + 1) % state.players.length;
-  if (state.current === 0) state.round++;
-  const next = currentPlayer(state);
-  state.phase = next.jail > 0 ? 'jail' : 'move';
-  if (state.phase === 'move' && next.hand.length === 0) {
-    say(state, next, `${next.name} não tem cartas e perde a vez.`);
-    endTurn(state);
-  }
+function firstBy(state: GameState, from: number, key: (p: Player) => number): Player {
+  let best = state.players[from];
+  for (const id of others(state, from)) if (key(state.players[id]) > key(best)) best = state.players[id];
+  return best;
 }
 
-function release(p: Player): void {
-  p.jail = 0;
-  p.pos = gateId(p.sign);
+/** Substitui o marcador de alvo pelo jogador escolhido. */
+function subst(ops: Op[], id: number): Op[] {
+  return JSON.parse(JSON.stringify(ops), (key, value) => (value === T && ['p', 'from', 'to', 'of', 'who', 'a', 'd'].includes(key) ? id : value));
 }
 
-/** No Tártaro: pagar a fiança e jogar normalmente, ou cumprir um turno de pena. */
-export function jailChoice(state: GameState, choice: 'pay' | 'serve'): void {
-  const p = currentPlayer(state);
-  if (state.phase !== 'jail') throw new Error('Não é hora de escolher no Tártaro.');
-  if (choice === 'pay') {
-    if (p.dracmas < RULES.bail) throw new Error('Dracmas insuficientes para a fiança.');
-    change(p, 'dracmas', -RULES.bail);
-    release(p);
-    state.phase = 'move';
-    say(state, p, `${p.name} paga ${RULES.bail} dracmas a Caronte e deixa o Tártaro.`);
-    return;
-  }
-  p.jail--;
-  if (p.jail === 0) {
-    release(p);
-    say(state, p, `${p.name} cumpre a pena e volta ao portão de ${SIGNS[p.sign].god}.`);
-  } else {
-    say(state, p, `${p.name} cumpre pena no Tártaro (${p.jail} turno${p.jail > 1 ? 's' : ''} restante${p.jail > 1 ? 's' : ''}).`);
-  }
-  endTurn(state);
+// ---------- regras consultáveis pela interface e pela IA ----------
+
+function martelo(p: Player, card: Card): boolean {
+  return card.use === 'D' && has(p, G.hefesto) && !p.used.martelo;
 }
 
-/** Descarta a carta e anda exatamente o valor dela até `dest`. */
-export function moveWithCard(state: GameState, cardId: number, dest: number): void {
-  const p = currentPlayer(state);
-  if (state.phase !== 'move') throw new Error('Não é a fase de movimento.');
-  const at = p.hand.indexOf(cardId);
-  if (at < 0) throw new Error('A carta não está na mão.');
-  if (!moveOptions(state, cardId).has(dest)) throw new Error('Destino inválido para esta carta.');
-  const card = CARDS[cardId];
-  p.hand.splice(at, 1);
-  state.discard.push(cardId);
-  p.pos = dest;
+/** Custo do efeito: −1 no naipe do elemento do signo; descontos de carta/relíquia não acumulam entre si. */
+export function costFor(p: Player, card: Card): number {
+  let cost = card.cost;
+  if (ELEMENT_SUIT[SIGNS[p.sign].element] === card.suit) cost--;
+  if (p.discountNext || martelo(p, card)) cost--;
+  return Math.max(0, cost);
+}
+
+/** A carta pode ter o efeito usado na casa atual? (U: qualquer casa; E: templo do elemento; D: templo nomeado.) */
+export function placeAllows(p: Player, card: Card): boolean {
+  if (card.use === 'U') return true;
   const node = NODES[p.pos];
-  say(state, p, `${p.name} descarta ${cardName(card)} e anda ${card.move} até ${node.type === 'templo' ? `o Templo de ${SIGNS[node.sector].god}` : 'a região de ' + SIGNS[node.sector].god}.`);
-  land(state, p);
-  if (checkWinner(state)) return;
-  if (p.jail > 0) {
-    endTurn(state);
+  if (node.type !== 'templo') return false;
+  return card.use === 'D' ? node.region === card.god : GODS[node.region].element === SUIT_ELEMENT[card.suit];
+}
+
+const acting = (state: GameState): boolean => state.phase === 'CHOOSE_ACTION' && !currentPlayer(state).jailed;
+
+export function canEffect(state: GameState, cardId: number): boolean {
+  const p = currentPlayer(state);
+  const card = CARDS[cardId];
+  return acting(state) && p.hand.includes(cardId) && placeAllows(p, card) && p.dracmas >= costFor(p, card);
+}
+
+export function moveOptions(state: GameState, cardId: number, mod = 0): Map<number, number[]> {
+  return reach(currentPlayer(state).pos, Math.max(1, CARDS[cardId].move + mod));
+}
+
+export const canUseSandals = (state: GameState): boolean => {
+  const p = currentPlayer(state);
+  return acting(state) && has(p, G.hermes) && !p.used.sandals;
+};
+
+function templeAffordable(p: Player, region: number): boolean {
+  const { cost, res } = GODS[region].action;
+  return !p.used.temple && p[res] >= cost;
+}
+
+export function canTempleAction(state: GameState): boolean {
+  const p = currentPlayer(state);
+  const node = NODES[p.pos];
+  return acting(state) && node.type === 'templo' && templeAffordable(p, node.region);
+}
+
+function relicAffordable(state: GameState, p: Player, region: number): boolean {
+  return state.stock[region] && p.dracmas >= GODS[region].relic.price;
+}
+
+export function canBuyRelic(state: GameState): boolean {
+  const p = currentPlayer(state);
+  const node = NODES[p.pos];
+  return acting(state) && node.type === 'templo' && relicAffordable(state, p, node.region);
+}
+
+export function freePowers(state: GameState): FreePower[] {
+  if (!acting(state)) return [];
+  const p = currentPlayer(state);
+  const list: FreePower[] = [];
+  if (state.oracle.holder === p.id) {
+    if (!p.used.vision) list.push('vision');
+    if (!state.oracle.weaveUsed && p.favor >= 2) list.push('weave');
+  }
+  if (has(p, G.apolo) && !p.used.lira) list.push('lira');
+  if (has(p, G.dionisio) && !p.used.taca && p.hubris >= 1) list.push('taca');
+  if (has(p, G.zeus)) list.push('raio');
+  return list;
+}
+
+export function votes(p: Player): number {
+  return p.favor + (has(p, G.hera) ? 1 : 0);
+}
+
+// ---------- ações de templo e Destino ----------
+
+function templeActionOps(region: number, p: number): Op[] {
+  const g = (res: Res, n: number): Op => ({ t: 'res', p, res, n });
+  const effect: Op[][] = [
+    [g('gloria', 2)],
+    [g('favor', 2)],
+    [{ t: 'peek', p, deck: 'destiny', n: 3, reorder: false }],
+    [{ t: 'advance', p, who: p, min: 0, max: 3 }],
+    [{ t: 'draw', p, n: 2 }, { t: 'discard', p, n: 2 }],
+    [{ t: 'target', p, prompt: 'De quem roubar até 2 Dracmas?', ops: [{ t: 'transfer', from: T, to: p, res: 'dracmas', n: 2 }] }],
+    [{ t: 'shield', p }],
+    [g('gloria', 2), g('hubris', 1)],
+    [{ t: 'draw', p, n: 2 }, { t: 'discard', p, n: 1 }],
+    [g('dracmas', 4)],
+    [g('gloria', 2)],
+    [{ t: 'teleport', p, kind: 'adjacent' }],
+  ];
+  return [{ t: 'payTemple', p, region }, ...effect[region]];
+}
+
+/** Jogadores prejudicados pessoalmente pelo Arcano (para a Proteção do Destino do Oráculo). */
+function harmedBy(state: GameState, id: number, active: number): number[] {
+  const all = state.players;
+  switch (id) {
+    case 4: return [firstBy(state, active, (p) => p.gloria).id];
+    case 8: return all.filter((p) => p.hubris >= 3 && p.dracmas > 0).map((p) => p.id);
+    case 12: return [active];
+    case 13: return all.filter((p) => p.hand.length > 0).map((p) => p.id);
+    case 16: return all.filter((p) => p.dracmas > 0).map((p) => p.id);
+    case 20: return all.filter((p) => p.hubris >= 4 && !p.jailed).map((p) => p.id);
+    default: return [];
+  }
+}
+
+function destinyOps(state: GameState, id: number, a: number, exempt: number): Op[] {
+  const order = [a, ...others(state, a)];
+  const each = (make: (p: number) => Op[], skipExempt = false): Op[] => order.filter((p) => !skipExempt || p !== exempt).flatMap(make);
+  const g = (p: number, res: Res, n: number): Op => ({ t: 'res', p, res, n });
+  switch (id) {
+    case 0: return each((p) => [{ t: 'draw', p, n: 1 }, { t: 'discard', p, n: 1 }]);
+    case 1: return [g(a, 'dracmas', 2), g(a, 'favor', 1)];
+    case 2: return [{ t: 'peek', p: a, deck: 'destiny', n: 3, reorder: true }];
+    case 3: return each((p) => [g(p, 'dracmas', 3)]);
+    case 4: {
+      const leader = firstBy(state, a, (p) => p.gloria).id;
+      return each((p) => (p === leader ? (p === exempt ? [] : [g(p, 'hubris', 1)]) : [g(p, 'dracmas', 1)]));
+    }
+    case 5: return each((p) => [g(p, 'hubris', -1)]);
+    case 6: return [{ t: 'target', p: a, prompt: 'Com quem dividir 1 Favor?', good: true, ops: [g(T, 'favor', 1), g(a, 'favor', 1)] }];
+    case 7: return [{ t: 'advance', p: a, who: a, min: 3, max: 3 }];
+    case 8: return each((p) => (state.players[p].hubris >= 3 ? [g(p, 'dracmas', -2)] : []), true);
+    case 9: return [{ t: 'draw', p: a, n: 2 }, { t: 'discard', p: a, n: 2 }];
+    case 10: return [{ t: 'redraw' }];
+    case 11: return [g(a, 'gloria', 2), g(a, 'hubris', 1)];
+    case 12: return a === exempt ? [] : [{ t: 'enforcado', p: a }];
+    case 13: return each((p) => [{ t: 'discardRandom', p, n: 1 }], true);
+    case 14: return each((p) => [g(p, 'hubris', -2)]);
+    case 15: return [g(a, 'dracmas', 5), g(a, 'hubris', 2)];
+    case 16: return each((p) => [g(p, 'dracmas', -3)], true);
+    case 17: return [g(firstBy(state, a, (p) => -p.gloria).id, 'gloria', 2)];
+    case 18: return [{ t: 'revealRandom' }, g(a, 'favor', 1)];
+    case 19: return each((p) => [g(p, 'gloria', 1)]);
+    case 20: return each((p) => (state.players[p].hubris >= 4 ? [{ t: 'jail', p }] : []), true);
+    case 21: return [g(a, 'gloria', 3), g(a, 'favor', 1)];
+    default: throw new Error(`Arcano desconhecido: ${id}`);
+  }
+}
+
+// ---------- chegada em casas ----------
+
+function land(state: GameState, p: Player): Op[] {
+  const node = NODES[p.pos];
+  const id = p.id;
+  switch (node.type) {
+    case 'comum':
+    case 'bifurcacao':
+    case 'tartaro':
+      return [];
+    case 'dracmas':
+      change(p, 'dracmas', RULES.houseDracmas);
+      say(state, id, `Casa de Dracmas: ${p.name} ganha ${RULES.houseDracmas} Dracmas.`);
+      return [];
+    case 'favor':
+      change(p, 'favor', RULES.houseFavor);
+      say(state, id, `Casa de Favor: ${p.name} ganha ${RULES.houseFavor} Favor.`);
+      return [];
+    case 'gloria':
+      change(p, 'gloria', RULES.houseGloria);
+      say(state, id, `Casa de Glória: ${p.name} ganha ${RULES.houseGloria} Glória.`);
+      return [];
+    case 'evento': {
+      const roll = d6(state);
+      const table: [string, Op[]][] = [
+        ['−2 Dracmas', [{ t: 'res', p: id, res: 'dracmas', n: -2 }]],
+        ['+1 Húbris', [{ t: 'res', p: id, res: 'hubris', n: 1 }]],
+        ['+2 Dracmas', [{ t: 'res', p: id, res: 'dracmas', n: 2 }]],
+        ['compra 1 carta', [{ t: 'draw', p: id, n: 1 }]],
+        ['+1 Favor', [{ t: 'res', p: id, res: 'favor', n: 1 }]],
+        ['+1 Glória', [{ t: 'res', p: id, res: 'gloria', n: 1 }]],
+      ];
+      say(state, id, `Evento: ${p.name} tira ${roll}: ${table[roll - 1][0]}.`);
+      if (roll <= 2 && arco(state, p)) return [];
+      return table[roll - 1][1];
+    }
+    case 'destino':
+      return [{ t: 'destiny', p: id }];
+    case 'nemesis': {
+      if (p.hubris <= 1) {
+        say(state, id, `Nêmesis nada tem contra ${p.name}.`);
+        return [];
+      }
+      say(state, id, `Nêmesis julga ${p.name} (Húbris ${p.hubris}).`);
+      if (arco(state, p)) return [];
+      if (p.hubris <= 3) return [{ t: 'res', p: id, res: 'dracmas', n: -2 }];
+      if (p.hubris >= 6 || p.dracmas < RULES.nemesisFine) return [{ t: 'jail', p: id }];
+      return [{
+        t: 'choice', p: id, prompt: 'Nêmesis exige reparação', options: [
+          { label: `Pagar ${RULES.nemesisFine} Dracmas`, ops: [{ t: 'res', p: id, res: 'dracmas', n: -RULES.nemesisFine }] },
+          { label: 'Ir ao Tártaro', ops: [{ t: 'jail', p: id }] },
+        ],
+      }];
+    }
+    case 'templo': {
+      const god = GODS[node.region];
+      const cost = god.action.cost === 0 ? 'grátis' : `${god.action.cost} ${god.action.res === 'favor' ? 'Favores' : 'Dracmas'}`;
+      const options: ChoiceOption[] = [
+        { label: `${god.action.label} (${cost})`, ops: templeActionOps(node.region, id), disabled: !templeAffordable(p, node.region) },
+        { label: `Comprar ${god.relic.name} (${god.relic.price} Dracmas)`, ops: [{ t: 'buy', p: id, relic: node.region }], disabled: !relicAffordable(state, p, node.region) },
+        { label: 'Nenhuma ação', ops: [] },
+      ];
+      if (options[0].disabled && options[1].disabled) return [];
+      return [{ t: 'choice', p: id, prompt: `Templo de ${god.name}`, options }];
+    }
+    case 'delfos':
+      return [{
+        t: 'choice', p: id, prompt: 'Delfos', options: [
+          { label: 'Ver 2 cartas do Destino (grátis)', ops: [{ t: 'peek', p: id, deck: 'destiny', n: 2, reorder: false }] },
+          { label: 'Pagar 2 Dracmas: +1 Favor', ops: [{ t: 'res', p: id, res: 'dracmas', n: -2 }, { t: 'res', p: id, res: 'favor', n: 1 }], disabled: p.dracmas < 2 },
+          { label: 'Pagar 3 Dracmas: comprar 2 e descartar 2', ops: [{ t: 'res', p: id, res: 'dracmas', n: -3 }, { t: 'draw', p: id, n: 2 }, { t: 'discard', p: id, n: 2 }], disabled: p.dracmas < 3 },
+        ],
+      }];
+  }
+}
+
+// ---------- fim de turno, rodada e eleição ----------
+
+function victory(state: GameState): boolean {
+  const best = firstBy(state, state.current, (p) => p.gloria);
+  if (best.gloria < state.goal) return false;
+  state.winner = best.id;
+  state.phase = 'GAME_OVER';
+  state.queue = [];
+  state.pending = null;
+  say(state, best.id, `${best.name} alcança ${best.gloria} de Glória e ascende ao Olimpo!`);
+  return true;
+}
+
+function election(state: GameState): void {
+  const ranked = [...state.players].sort((a, b) => votes(b) - votes(a) || a.hubris - b.hubris || a.gloria - b.gloria);
+  const [first, second] = ranked;
+  const tied = votes(first) === votes(second) && first.hubris === second.hubris && first.gloria === second.gloria;
+  const tally = state.players.map((p) => `${p.name} ${votes(p)}`).join(', ');
+  state.oracle = { holder: tied ? null : first.id, weaveUsed: false, protectUsed: false };
+  if (tied) {
+    say(state, null, `Eleição em Delfos (${tally}): empate. O cargo de Oráculo fica vago.`);
+  } else {
+    change(first, 'gloria', 1);
+    say(state, first.id, `Eleição em Delfos (${tally}): ${first.name} é o Oráculo e ganha 1 Glória.`);
+  }
+}
+
+function roundEnd(state: GameState): void {
+  if (state.round % RULES.electionEvery === 0) {
+    election(state);
+    if (victory(state)) return;
+  }
+  const cinto = state.round % 3 === 0;
+  state.round++;
+  for (const p of state.players) {
+    p.used = {};
+    if (has(p, G.demeter)) change(p, 'dracmas', 1);
+    if (cinto && has(p, G.afrodite)) change(p, 'favor', 1);
+  }
+}
+
+// ---------- fila de efeitos ----------
+
+function take(state: GameState): Answer {
+  const a = state.answer!.v;
+  state.answer = null;
+  return a;
+}
+
+/** Executa um passo. Devolve os passos que o substituem, ou null se aguarda uma decisão. */
+function exec(state: GameState, op: Op): Op[] | null {
+  const P = (id: number): Player => state.players[id];
+  switch (op.t) {
+    case 'turnStart': {
+      const p = P(op.p);
+      p.duelDone = false;
+      if (!p.jailed) return [{ t: 'refill', p: p.id }];
+      const id = p.id;
+      return [{
+        t: 'choice', p: id, prompt: 'Você está no Tártaro', options: [
+          { label: 'Penitência: perde a ação, remove 2 Húbris e sai ao fim do turno', ops: [{ t: 'res', p: id, res: 'hubris', n: -2 }, { t: 'log', p: id, text: `${p.name} faz penitência no Tártaro.` }, { t: 'release', p: id }, { t: 'endTurn' }] },
+          { label: `Suborno: paga ${RULES.bail} Dracmas, sai e age`, disabled: p.dracmas < RULES.bail, ops: [{ t: 'res', p: id, res: 'dracmas', n: -RULES.bail }, { t: 'log', p: id, text: `${p.name} suborna Caronte e deixa o Tártaro.` }, { t: 'release', p: id }, { t: 'refill', p: id }] },
+          { label: 'Pacto Sombrio: perde 1 Glória, ganha 2 Húbris, sai e age', disabled: p.gloria < 1, ops: [{ t: 'res', p: id, res: 'gloria', n: -1, raw: true }, { t: 'res', p: id, res: 'hubris', n: 2 }, { t: 'log', p: id, text: `${p.name} sela um Pacto Sombrio e deixa o Tártaro.` }, { t: 'release', p: id }, { t: 'refill', p: id }] },
+        ],
+      }];
+    }
+    case 'refill': {
+      const p = P(op.p);
+      drawCards(state, p, Math.max(0, RULES.hand - p.hand.length));
+      return [];
+    }
+    case 'res': {
+      const p = P(op.p);
+      if (op.res === 'gloria' && op.n < 0 && !op.raw && p.gloria > 0 && gloryBlocked(state, p)) return [];
+      change(p, op.res, op.n);
+      return [];
+    }
+    case 'transfer': {
+      const taken = -change(P(op.from), op.res, -op.n);
+      change(P(op.to), op.res, taken);
+      say(state, op.to, `${P(op.to).name} toma ${taken} ${RES_NAME[op.res]} de ${P(op.from).name}.`);
+      return [];
+    }
+    case 'target': {
+      const list = others(state, op.p);
+      if (list.length === 1) return subst(op.ops, list[0]);
+      if (!state.answer) {
+        state.pending = { player: op.p, kind: 'target', prompt: op.prompt, players: list };
+        return null;
+      }
+      const a = take(state);
+      return subst(op.ops, list.includes(a as number) ? (a as number) : list[0]);
+    }
+    case 'choice': {
+      const open = op.options.filter((o) => !o.disabled);
+      if (open.length === 1) return open[0].ops;
+      if (!state.answer) {
+        state.pending = { player: op.p, kind: 'choice', prompt: op.prompt, options: op.options.map(({ label, disabled }) => ({ label, disabled })) };
+        return null;
+      }
+      const chosen = op.options[take(state) as number];
+      return chosen && !chosen.disabled ? chosen.ops : open[0].ops;
+    }
+    case 'draw':
+      drawCards(state, P(op.p), op.n);
+      return [];
+    case 'discard': {
+      const p = P(op.p);
+      const n = Math.min(op.n, p.hand.length);
+      if (n === 0) return [];
+      let picked = [...p.hand];
+      if (n < p.hand.length) {
+        if (!state.answer) {
+          state.pending = { player: p.id, kind: 'discard', prompt: `Descarte ${n} carta${n > 1 ? 's' : ''}`, count: n, cards: [...p.hand] };
+          return null;
+        }
+        const a = take(state);
+        const valid = Array.isArray(a) && a.length === n && new Set(a).size === n && a.every((c) => p.hand.includes(c));
+        picked = valid ? (a as number[]) : p.hand.slice(0, n);
+      }
+      for (const c of picked) discardCard(state, p, c);
+      return [];
+    }
+    case 'discardRandom': {
+      const p = P(op.p);
+      for (let i = 0; i < op.n && p.hand.length > 0; i++) {
+        const c = p.hand[Math.floor(rand(state) * p.hand.length)];
+        discardCard(state, p, c);
+        say(state, p.id, `${p.name} descarta ${cardName(CARDS[c])}.`);
+      }
+      return [];
+    }
+    case 'peek': {
+      ensure(state, op.deck, op.n);
+      const deck = op.deck === 'minor' ? state.deck : state.destiny;
+      const n = Math.min(op.n, deck.length);
+      if (n === 0) return [];
+      const top = deck.slice(-n).reverse();
+      if (!state.answer) {
+        const what = op.deck === 'minor' ? 'do baralho de jogadores' : 'do Destino';
+        state.pending = { player: op.p, kind: op.reorder ? 'reorder' : 'view', prompt: `Próximas cartas ${what} (a primeira é a do topo)`, cards: top, deck: op.deck };
+        return null;
+      }
+      const a = take(state);
+      if (op.reorder && Array.isArray(a) && a.length === n && [...a].sort().join() === [...top].sort().join()) {
+        deck.splice(deck.length - n, n, ...[...a].reverse());
+      }
+      return [];
+    }
+    case 'viewHand': {
+      const of = P(op.of);
+      if (of.hand.length === 0) return [];
+      if (!state.answer) {
+        state.pending = { player: op.p, kind: 'view', prompt: `Mão de ${of.name}`, cards: [...of.hand], deck: 'minor' };
+        return null;
+      }
+      take(state);
+      return [];
+    }
+    case 'swap': {
+      const p = P(op.p);
+      const of = P(op.of);
+      if (p.hand.length === 0 || of.hand.length === 0) return [];
+      if (!state.answer) {
+        state.pending = { player: p.id, kind: 'pickCard', prompt: `Escolha a carta que vai para ${of.name}`, cards: [...p.hand] };
+        return null;
+      }
+      const a = take(state);
+      const mine = p.hand.includes(a as number) ? (a as number) : p.hand[0];
+      const theirs = of.hand[Math.floor(rand(state) * of.hand.length)];
+      p.hand.splice(p.hand.indexOf(mine), 1, theirs);
+      of.hand.splice(of.hand.indexOf(theirs), 1, mine);
+      say(state, p.id, `${p.name} troca uma carta com ${of.name}.`);
+      return [];
+    }
+    case 'advance':
+    case 'teleport': {
+      const who = P(op.t === 'advance' ? op.who : op.p);
+      if (who.jailed) return [];
+      let nodes: number[];
+      if (op.t === 'advance') {
+        const set = new Set<number>();
+        for (let k = op.min; k <= op.max; k++) for (const n of k === 0 ? [who.pos] : reach(who.pos, k).keys()) set.add(n);
+        nodes = [...set];
+      } else if (op.kind === 'common') {
+        nodes = COMMON.filter((n) => n !== who.pos);
+      } else {
+        const r = NODES[who.pos].region;
+        nodes = COMMON.filter((n) => [(r + 1) % 12, (r + 11) % 12].includes(NODES[n].region));
+      }
+      if (nodes.length === 0) return [];
+      let dest = nodes[0];
+      if (nodes.length > 1) {
+        if (!state.answer) {
+          state.pending = { player: op.p, kind: 'dest', prompt: who.id === op.p ? 'Escolha a casa de destino no mapa' : `Escolha para onde mover ${who.name}`, nodes };
+          return null;
+        }
+        const a = take(state);
+        if (nodes.includes(a as number)) dest = a as number;
+      }
+      if (dest !== who.pos) {
+        who.pos = dest;
+        say(state, op.p, `${who.name} vai para a casa ${String(dest).padStart(2, '0')} sem ativar o destino.`);
+      }
+      return [];
+    }
+    case 'jail':
+      jail(state, P(op.p));
+      return [];
+    case 'release':
+      P(op.p).jailed = false;
+      return [];
+    case 'shield':
+      P(op.p).shield = true;
+      return [];
+    case 'discountNext':
+      P(op.p).discountNext = true;
+      return [];
+    case 'paus9': {
+      const p = P(op.p);
+      change(p, 'gloria', p.hubris >= 3 ? 3 : 2);
+      return [];
+    }
+    case 'behind': {
+      const p = P(op.p);
+      const leader = Math.max(...others(state, p.id).map((id) => P(id).gloria));
+      change(p, 'gloria', p.gloria < leader ? 2 : 1);
+      return [];
+    }
+    case 'enforcado': {
+      const p = P(op.p);
+      if (p.favor > 0) change(p, 'favor', -1);
+      else change(p, 'dracmas', -2);
+      return [];
+    }
+    case 'redraw':
+      for (const p of state.players) {
+        state.discard.push(...p.hand);
+        p.hand = [];
+      }
+      for (const p of state.players) drawCards(state, p, RULES.hand);
+      return [];
+    case 'revealRandom':
+      for (const p of state.players) {
+        if (p.hand.length === 0) continue;
+        const c = CARDS[p.hand[Math.floor(rand(state) * p.hand.length)]];
+        say(state, p.id, `${p.name} revela ${cardName(c)}.`);
+      }
+      return [];
+    case 'destiny': {
+      ensure(state, 'destiny', 1);
+      if (state.destiny.length === 0) return [];
+      const id = state.destiny.pop()!;
+      state.destinyDiscard.push(id);
+      state.lastDestiny = id;
+      const d = DESTINIES[id];
+      say(state, op.p, `Destino revelado: ${d.numeral} · ${d.name}. ${d.text}`);
+      const h = state.oracle.holder;
+      const apply: Op = { t: 'destinyApply', p: op.p, id, exempt: -2 };
+      if (h !== null && !P(h).jailed && !state.oracle.protectUsed && P(h).favor >= 3 && harmedBy(state, id, op.p).includes(h)) {
+        return [{
+          t: 'choice', p: h, prompt: `Proteção do Destino contra ${d.name}?`, options: [
+            { label: 'Ignorar o evento (3 Favores)', ops: [{ t: 'res', p: h, res: 'favor', n: -3 }, { t: 'protect', p: h }, { ...apply, exempt: h }] },
+            { label: 'Aceitar o Destino', ops: [apply] },
+          ],
+        }];
+      }
+      return [apply];
+    }
+    case 'destinyApply':
+      return destinyOps(state, op.id, op.p, op.exempt);
+    case 'protect':
+      state.oracle.protectUsed = true;
+      say(state, op.p, `${P(op.p).name}, o Oráculo, usa a Proteção do Destino.`);
+      return [];
+    case 'land':
+      return P(op.p).jailed ? [] : land(state, P(op.p));
+    case 'encounter': {
+      const p = P(op.p);
+      if (p.jailed || p.duelDone) return [];
+      const foes = others(state, p.id).filter((id) => P(id).pos === p.pos && !P(id).jailed);
+      if (foes.length === 0) return [];
+      return [{
+        t: 'choice', p: p.id, prompt: 'Encontro: desafiar para um duelo?', options: [
+          ...foes.map((id) => ({ label: `Duelar com ${P(id).name}`, ops: [{ t: 'duel', a: p.id, d: id } as Op] })),
+          { label: 'Não duelar', ops: [] },
+        ],
+      }];
+    }
+    case 'duel': {
+      const a = P(op.a);
+      const d = P(op.d);
+      for (const [key, who] of [['bidA', a], ['bidD', d]] as const) {
+        if (op[key] !== undefined) continue;
+        const max = Math.min(RULES.maxBid, who.favor);
+        if (max === 0) {
+          op[key] = 0;
+        } else if (!state.answer) {
+          state.pending = { player: who.id, kind: 'bid', prompt: `Duelo ${a.name} × ${d.name}: aposte Favores em segredo`, max, secret: true };
+          return null;
+        } else {
+          op[key] = Math.max(0, Math.min(max, Math.floor(Number(take(state)) || 0)));
+        }
+      }
+      a.duelDone = true;
+      state.stats.duels++;
+      change(a, 'favor', -op.bidA!);
+      change(d, 'favor', -op.bidD!);
+      const fa = op.bidA! + (has(a, G.ares) ? 1 : 0);
+      const fd = op.bidD! + (has(d, G.ares) ? 1 : 0);
+      let result = 'Empate: o defensor resiste, sem prêmio.';
+      if (fa > fd) result = `${a.name} vence e toma ${change(a, 'dracmas', -change(d, 'dracmas', -2))} Dracmas.`;
+      else if (fd > fa) result = `${d.name} vence e recebe ${change(d, 'favor', -change(a, 'favor', -1))} Favor.`;
+      say(state, a.id, `Duelo: ${a.name} (força ${fa}) × ${d.name} (força ${fd}). ${result}`);
+      return [];
+    }
+    case 'payTemple': {
+      const p = P(op.p);
+      const god = GODS[op.region];
+      change(p, god.action.res, -god.action.cost);
+      p.used.temple = 1;
+      say(state, p.id, `${p.name} usa o Templo de ${god.name}: ${god.action.label.toLowerCase()}.`);
+      return [];
+    }
+    case 'buy': {
+      const p = P(op.p);
+      const relic = GODS[op.relic].relic;
+      if (!state.stock[op.relic] || p.dracmas < relic.price) return [];
+      if (p.relics.length >= RULES.maxRelics) {
+        if (!state.answer) {
+          state.pending = { player: p.id, kind: 'choice', prompt: `Substituir qual relíquia por ${relic.name}?`, options: p.relics.map((r) => ({ label: GODS[r].relic.name })) };
+          return null;
+        }
+        const old = p.relics[take(state) as number] ?? p.relics[0];
+        p.relics.splice(p.relics.indexOf(old), 1);
+        state.stock[old] = true;
+      }
+      change(p, 'dracmas', -relic.price);
+      state.stock[op.relic] = false;
+      p.relics.push(op.relic);
+      say(state, p.id, `${p.name} adquire ${relic.name}.`);
+      return [];
+    }
+    case 'log':
+      say(state, op.p, op.text);
+      return [];
+    case 'endTurn': {
+      if (victory(state)) return [];
+      if (state.sim) {
+        state.queue = [];
+        return [];
+      }
+      state.current = (state.current + 1) % state.players.length;
+      if (state.current === 0) {
+        roundEnd(state);
+        if (state.winner !== null) return [];
+      }
+      return [{ t: 'turnStart', p: state.current }];
+    }
+  }
+}
+
+function run(state: GameState): void {
+  while (state.phase !== 'GAME_OVER' && !state.pending && state.queue.length > 0) {
+    const op = state.queue.shift()!;
+    const result = exec(state, op);
+    if ((state.phase as string) === 'GAME_OVER') return;
+    if (result === null) state.queue.unshift(op);
+    else state.queue.unshift(...result);
+  }
+  if (state.phase !== 'GAME_OVER') state.phase = state.pending || state.queue.length > 0 ? 'RESOLVE_EFFECTS' : 'CHOOSE_ACTION';
+}
+
+// ---------- comandos ----------
+
+/** Aplica um comando ao estado. Lança erro se o comando for inválido no momento. */
+export function apply(state: GameState, cmd: Command): void {
+  if (state.phase === 'GAME_OVER') throw new Error('A partida terminou.');
+  if (cmd.type === 'ANSWER') {
+    if (!state.pending) throw new Error('Não há decisão pendente.');
+    state.answer = { v: cmd.value };
+    state.pending = null;
+    run(state);
     return;
   }
-  state.phase = 'action';
-  if (playableCards(state).length === 0) endTurn(state);
-}
-
-/** No templo do deus da carta: paga o custo e aplica os efeitos. */
-export function playCard(state: GameState, cardId: number): void {
+  if (state.phase !== 'CHOOSE_ACTION') throw new Error('Há efeitos ou decisões pendentes.');
   const p = currentPlayer(state);
-  if (!p.hand.includes(cardId) || !canPlay(state, p, cardId)) throw new Error('Esta carta não pode ser jogada agora.');
-  const card = CARDS[cardId];
-  change(p, 'dracmas', -costFor(p, card));
-  p.hand.splice(p.hand.indexOf(cardId), 1);
-  state.discard.push(cardId);
-  say(state, p, `${p.name} joga ${card.title} (${cardName(card)}) no Templo de ${SIGNS[card.sector].god}.`);
-  for (const e of card.effects) applyEffect(state, p, e);
-  endTurn(state);
+  switch (cmd.type) {
+    case 'PLAY_CARD_MOVE': {
+      const mod = cmd.mod ?? 0;
+      if (!p.hand.includes(cmd.card)) throw new Error('A carta não está na mão.');
+      if (mod !== 0 && !canUseSandals(state)) throw new Error('Sandálias de Hermes indisponíveis.');
+      const path = moveOptions(state, cmd.card, mod).get(cmd.dest);
+      if (!path) throw new Error('Destino inválido para esta carta.');
+      if (mod !== 0) p.used.sandals = 1;
+      discardCard(state, p, cmd.card);
+      let crossed = 0;
+      let region = NODES[p.pos].region;
+      for (const n of path) {
+        if (NODES[n].region !== region) crossed++;
+        region = NODES[n].region;
+      }
+      p.pos = cmd.dest;
+      const node = NODES[p.pos];
+      say(state, p.id, `${p.name} descarta ${cardName(CARDS[cmd.card])} e anda ${path.length} até a casa ${String(node.id).padStart(2, '0')} (${GODS[node.region].name}).`);
+      if (has(p, G.poseidon) && crossed > 0) {
+        const gain = Math.min(crossed, 2 - (p.used.trident ?? 0));
+        if (gain > 0) {
+          p.used.trident = (p.used.trident ?? 0) + gain;
+          change(p, 'dracmas', gain);
+          say(state, p.id, `O Tridente de Poseidon rende ${gain} Dracma${gain > 1 ? 's' : ''}.`);
+        }
+      }
+      state.queue = [{ t: 'land', p: p.id }, { t: 'encounter', p: p.id }, { t: 'endTurn' }];
+      break;
+    }
+    case 'PLAY_CARD_EFFECT': {
+      if (!canEffect(state, cmd.card)) throw new Error('O efeito desta carta não pode ser usado agora.');
+      const card = CARDS[cmd.card];
+      change(p, 'dracmas', -costFor(p, card));
+      if (martelo(p, card)) p.used.martelo = 1;
+      else p.discountNext = false;
+      discardCard(state, p, cmd.card);
+      say(state, p.id, `${p.name} joga ${cardName(card)}: ${card.text}`);
+      state.queue = [...effectOps(cmd.card, p.id), { t: 'endTurn' }];
+      break;
+    }
+    case 'TEMPLE_ACTION':
+      if (!canTempleAction(state)) throw new Error('Ação de templo indisponível.');
+      state.queue = [...templeActionOps(NODES[p.pos].region, p.id), { t: 'endTurn' }];
+      break;
+    case 'BUY_RELIC':
+      if (!canBuyRelic(state)) throw new Error('Não é possível comprar a relíquia.');
+      state.queue = [{ t: 'buy', p: p.id, relic: NODES[p.pos].region }, { t: 'endTurn' }];
+      break;
+    case 'FREE_POWER': {
+      if (!freePowers(state).includes(cmd.power)) throw new Error('Poder indisponível.');
+      if (cmd.power === 'vision') {
+        p.used.vision = 1;
+        state.queue = [{ t: 'peek', p: p.id, deck: 'destiny', n: 3, reorder: false }];
+      } else if (cmd.power === 'weave') {
+        change(p, 'favor', -2);
+        state.oracle.weaveUsed = true;
+        say(state, p.id, `${p.name}, o Oráculo, tece o Destino.`);
+        state.queue = [{ t: 'peek', p: p.id, deck: 'destiny', n: 3, reorder: true }];
+      } else if (cmd.power === 'lira') {
+        p.used.lira = 1;
+        state.queue = [{ t: 'peek', p: p.id, deck: 'destiny', n: 1, reorder: false }];
+      } else if (cmd.power === 'taca') {
+        p.used.taca = 1;
+        change(p, 'hubris', -1);
+        change(p, 'dracmas', 2);
+        say(state, p.id, `${p.name} bebe da Taça de Dionísio: −1 Húbris, +2 Dracmas.`);
+      } else {
+        p.relics.splice(p.relics.indexOf(G.zeus), 1);
+        change(p, 'gloria', 3);
+        change(p, 'hubris', 2);
+        say(state, p.id, `${p.name} desfere o Raio de Zeus: +3 Glórias, +2 Húbris.`);
+      }
+      break;
+    }
+    case 'END_TURN':
+      state.queue = [{ t: 'endTurn' }];
+      break;
+  }
+  run(state);
 }
 
-export function pass(state: GameState): void {
-  if (state.phase !== 'action') throw new Error('Não há ação para passar.');
-  endTurn(state);
+// ---------- persistência ----------
+
+export const serialize = (state: GameState): string => JSON.stringify(state);
+
+export function deserialize(json: string): GameState {
+  const state = JSON.parse(json) as GameState;
+  if (state.version !== SAVE_VERSION) throw new Error(`Versão de partida salva incompatível: ${state.version}.`);
+  return state;
 }

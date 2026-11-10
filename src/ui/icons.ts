@@ -1,24 +1,21 @@
 import type { HouseType } from '../engine/types';
 
-/** Ícones das casas, desenhados numa caixa de ±10 em torno da origem. */
-const PATHS: Record<Exclude<HouseType, 'templo'>, string> = {
-  oferenda: '<path d="M-4,-9h8M-3,-9C-3,-5 -8,-3 -7,3C-6,8 6,8 7,3C8,-3 3,-5 3,-9M-3,8.5h6"/>',
-  tributo: '<circle r="8"/><path d="M-4,0h8"/>',
-  nemesis: '<path d="M0,-9v17M-5,8h10M-8,-6h16M-8,-6l-2,7h4zM8,-6l-2,7h4z"/>',
-  moiras: '<path d="M-6,-8h12L-6,8h12Z"/>',
-  fortuna:
-    '<rect x="-8" y="-8" width="16" height="16" rx="3"/><circle r="1.4" class="dot"/><circle cx="-4" cy="-4" r="1.4" class="dot"/><circle cx="4" cy="4" r="1.4" class="dot"/><circle cx="4" cy="-4" r="1.4" class="dot"/><circle cx="-4" cy="4" r="1.4" class="dot"/>',
-  visao: '<path d="M-10,0C-5,-8 5,-8 10,0C5,8 -5,8 -10,0Z"/><circle r="3"/>',
-  purificacao: '<path d="M-9,-5q4.5,-5 9,0t9,0M-9,1q4.5,-5 9,0t9,0M-9,7q4.5,-5 9,0t9,0"/>',
-  tentacao: '<path d="M0,-10C7,-3 8,2 6,6C4,10 -4,10 -6,6C-8,2 -5,-1 -3,-4C-2,-1 0,0 0,-10Z"/>',
-  iris: '<path d="M-10,7a10,10 0 0 1 20,0M-6.5,7a6.5,6.5 0 0 1 13,0M-3,7a3,3 0 0 1 6,0"/>',
-  duelo: '<path d="M-8,-8L7,7M8,-8L-7,7M-9,3l5,5M9,3l-5,5"/>',
+/** Ícones das casas, desenhados numa caixa de ±9 em torno da origem. */
+const PATHS: Partial<Record<HouseType, string>> = {
+  dracmas: '<circle r="7.5"/><circle r="2.2" class="dot"/>',
+  favor: '<path d="M0,-9L2.2,-2.2L9,0L2.2,2.2L0,9L-2.2,2.2L-9,0L-2.2,-2.2Z"/>',
+  gloria: '<path d="M-8,6V-4L-4,1L0,-7L4,1L8,-4V6Z"/>',
+  evento:
+    '<rect x="-7.5" y="-7.5" width="15" height="15" rx="3"/><circle r="1.3" class="dot"/><circle cx="-3.8" cy="-3.8" r="1.3" class="dot"/><circle cx="3.8" cy="3.8" r="1.3" class="dot"/>',
+  destino: '<path d="M-6,-8h12L-6,8h12Z"/>',
+  nemesis: '<path d="M0,-8v15M-4,7h8M-7,-5h14M-7,-5l-2,6h4zM7,-5l-2,6h4z"/>',
+  bifurcacao: '<path d="M0,8V1M0,1L-6,-7M0,1L6,-7M-6,-7h4M-6,-7v4M6,-7h-4M6,-7v4"/>',
+  delfos: '<path d="M-9,0C-5,-7 5,-7 9,0C5,7 -5,7 -9,0Z"/><circle r="2.6"/>',
+  tartaro: '<path d="M0,-9C6,-3 7,2 5,5.5C3,9 -3,9 -5,5.5C-7,2 -4,-1 -2.5,-3.5C-2,-1 0,0 0,-9Z"/>',
 };
 
-export function houseIcon(type: HouseType): string {
-  return type === 'templo' ? '' : `<g class="icon">${PATHS[type]}</g>`;
-}
+export const houseIcon = (type: HouseType): string => (PATHS[type] ? `<g class="icon">${PATHS[type]}</g>` : '');
 
-export function iconSvg(type: HouseType, size = 22): string {
-  return `<svg class="house-chip" viewBox="-14 -14 28 28" width="${size}" height="${size}"><circle r="13"/>${houseIcon(type)}</svg>`;
+export function iconSvg(type: HouseType, label = ''): string {
+  return `<svg class="house-chip ${type}" viewBox="-13 -13 26 26" width="24" height="24"><circle r="12"/>${houseIcon(type)}${label ? `<text y="3.5">${label}</text>` : ''}</svg>`;
 }

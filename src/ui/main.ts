@@ -1,46 +1,61 @@
 import { aiStep } from '../engine/ai';
 import { HOUSE_INFO, NODES } from '../engine/board';
-import { cardName, CARDS, cardText } from '../engine/cards';
+import { cardName, CARDS, useLabel } from '../engine/cards';
+import { ELEMENT_NAME, glyph, GODS, SIGNS } from '../engine/data';
 import { DESTINIES } from '../engine/destiny';
-import { canPlay, costFor, currentPlayer, jailChoice, moveOptions, moveWithCard, newGame, pass, playCard, RULES } from '../engine/game';
-import { ELEMENT_NAME, ELEMENT_SUIT, glyph, SIGNS } from '../engine/signs';
-import type { GameState, HouseType, Player, PlayerConfig } from '../engine/types';
+import { apply, canBuyRelic, canEffect, canTempleAction, canUseSandals, costFor, deserialize, freePowers, moveOptions, newGame, RULES, serialize, votes } from '../engine/game';
+import type { Answer, Command, FreePower, GameState, HouseType, Pending, Player, PlayerConfig } from '../engine/types';
 import { boardSvg, PLAYER_COLORS, showHighlights, updateTokens } from './board-view';
 import { iconSvg } from './icons';
 import './style.css';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
-const AI_DELAY = 950;
+const SAVE_KEY = 'ascensao-ao-olimpo-save';
 
 let game: GameState;
-let selected: number | null = null;
-let lastHuman = 0;
-let aiTimer: number | undefined;
+let selected: number | null = null; // carta escolhida para mover
+let sandals: -1 | 0 | 1 = 0;
+let picks: number[] = []; // cartas marcadas num descarte
+let order: number[] = []; // ordem atual numa reorganização
+let orderFor: Pending | null = null;
+let seenBy = -1; // último humano que confirmou estar com o dispositivo
+let timer: number | undefined;
 
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+const pad = (id: number): string => String(id).padStart(2, '0');
+
+function store(action: 'get' | 'set' | 'clear', value = ''): string | null {
+  try {
+    if (action === 'get') return localStorage.getItem(SAVE_KEY);
+    if (action === 'set') localStorage.setItem(SAVE_KEY, value);
+    else localStorage.removeItem(SAVE_KEY);
+  } catch {
+    /* armazenamento indisponível: o jogo segue sem salvar */
+  }
+  return null;
+}
 
 // ---------- Tela inicial ----------
 
 type SeatKind = 'human' | 'ai' | 'off';
 const seats: { kind: SeatKind; name: string; sign: number }[] = [
   { kind: 'human', name: 'Você', sign: 4 },
-  { kind: 'ai', name: 'Cassandra', sign: 0 },
+  { kind: 'ai', name: 'Cassandra', sign: 6 },
   { kind: 'ai', name: 'Orfeu', sign: 7 },
-  { kind: 'off', name: 'Medeia', sign: 10 },
+  { kind: 'off', name: 'Medeia', sign: 1 },
 ];
 
 function renderSetup(): void {
-  window.clearTimeout(aiTimer);
+  window.clearTimeout(timer);
+  const saved = store('get');
   const signOptions = (current: number): string =>
-    SIGNS.map((s, i) => `<option value="${i}" ${i === current ? 'selected' : ''}>${glyph(i)} ${s.name} — ${s.god} (${ELEMENT_NAME[s.element]})</option>`).join('');
+    SIGNS.map((s, i) => `<option value="${i}" ${i === current ? 'selected' : ''}>${glyph(i)} ${s.name} · ${ELEMENT_NAME[s.element]} · patrono ${GODS[s.patron].name}</option>`).join('');
   app.innerHTML = `
     <div class="setup">
-      <h1>ASTRAL</h1>
-      <p class="tagline">Doze deuses, doze signos, um só lugar no Olimpo.</p>
+      <h1>Ascensão ao Olimpo</h1>
+      <p class="tagline">Doze deuses, doze signos, vinte e dois arcanos. Um só lugar entre os imortais.</p>
       <div class="seats">
-        ${seats
-          .map(
-            (s, i) => `
+        ${seats.map((s, i) => `
           <div class="seat ${s.kind === 'off' ? 'off' : ''}">
             <span class="swatch" style="background:${PLAYER_COLORS[i]}"></span>
             <select data-seat="${i}" data-field="kind" aria-label="Tipo do jogador ${i + 1}">
@@ -50,22 +65,14 @@ function renderSetup(): void {
             </select>
             <input data-seat="${i}" data-field="name" value="${esc(s.name)}" maxlength="14" aria-label="Nome do jogador ${i + 1}" />
             <select data-seat="${i}" data-field="sign" aria-label="Signo do jogador ${i + 1}">${signOptions(s.sign)}</select>
-          </div>`,
-          )
-          .join('')}
+          </div>`).join('')}
       </div>
-      <p class="hint">O signo define o deus patrono (onde você começa e ganha Favor) e o elemento: cartas do naipe do seu elemento custam 1 dracma a menos.</p>
-      <button id="start" class="primary">Começar a ascensão</button>
-      <details class="rules">
-        <summary>Como jogar</summary>
-        <ol>
-          <li>No seu turno, descarte uma carta para andar <b>exatamente</b> o valor de movimento dela. As trilhas têm sentido fixo; nas bifurcações você escolhe o caminho.</li>
-          <li>A casa onde você para tem um efeito (veja a legenda).</li>
-          <li>Se parar em um <b>templo</b>, pode jogar uma carta daquele deus pagando o custo em dracmas.</li>
-          <li>Cartas fortes dão <b>Húbris</b>. Nas casas de <b>Nêmesis</b>, um dado ≤ sua Húbris manda você ao Tártaro.</li>
-          <li>Vence quem primeiro chegar a <b>${RULES.goal} de Glória</b>.</li>
-        </ol>
-      </details>
+      <p class="hint">O signo define o elemento (cartas do naipe correspondente custam 1 Dracma a menos) e o deus patrono, em cujo templo você começa.</p>
+      <div class="setup-buttons">
+        <button id="start" class="primary">Começar a ascensão</button>
+        ${saved ? '<button id="resume">Continuar partida salva</button>' : ''}
+      </div>
+      <div class="rules-box">${rulesHtml()}</div>
     </div>`;
   app.querySelectorAll<HTMLSelectElement | HTMLInputElement>('[data-seat]').forEach((el) => {
     el.addEventListener('change', () => {
@@ -79,32 +86,56 @@ function renderSetup(): void {
   app.querySelector('#start')!.addEventListener('click', () => {
     const configs: PlayerConfig[] = seats.filter((s) => s.kind !== 'off').map((s) => ({ name: s.name, sign: s.sign, isAI: s.kind === 'ai' }));
     game = newGame(configs);
-    selected = null;
-    lastHuman = Math.max(0, configs.findIndex((c) => !c.isAI));
-    renderGame();
+    startGame();
   });
+  app.querySelector('#resume')?.addEventListener('click', () => {
+    try {
+      game = deserialize(saved!);
+      startGame();
+    } catch {
+      store('clear');
+      renderSetup();
+    }
+  });
+}
+
+function rulesHtml(): string {
+  const houses: HouseType[] = ['comum', 'dracmas', 'favor', 'gloria', 'evento', 'destino', 'nemesis', 'bifurcacao', 'delfos', 'tartaro'];
+  return `
+    <h2>Como jogar</h2>
+    <ol class="how">
+      <li>Vence quem chegar primeiro a <b>${RULES.goal} de Glória</b>. No início do turno a mão volta a 6 cartas.</li>
+      <li>Cada turno tem <b>uma ação principal</b>: <b>mover</b> (descarta a carta e anda exatamente o movimento dela), <b>usar o efeito</b> de uma carta (paga o custo e não se move), fazer a <b>ação do templo</b> ou <b>comprar a relíquia</b> do templo onde está.</li>
+      <li>Efeitos <b>universais</b> valem em qualquer casa; <b>elementais</b>, só em templo do elemento da carta; <b>divinos</b>, só no templo do deus indicado.</li>
+      <li>Só a casa onde você <b>termina</b> o movimento é ativada. Ao parar em templo, escolha: ação do templo (1 vez por rodada), relíquia ou nada.</li>
+      <li>Ao parar em casa ocupada, você pode desafiar para um <b>duelo</b>: cada um aposta de 0 a 3 Favores em segredo.</li>
+      <li>A cada ${RULES.electionEvery} rodadas há <b>eleição do Oráculo</b>: vence quem tiver mais Favor (o Favor não é gasto) e ganha 1 Glória.</li>
+      <li><b>Húbris</b> é punida nas casas de Nêmesis e pode levar ao <b>Tártaro</b>, de onde se sai por Penitência, Suborno ou Pacto Sombrio.</li>
+    </ol>
+    <h2>Casas</h2>
+    <ul class="legend">${houses.map((t) => `<li>${iconSvg(t, t === 'comum' ? '00' : '')}<div><b>${HOUSE_INFO[t].name}</b> ${HOUSE_INFO[t].text}</div></li>`).join('')}</ul>
+    <h2>Templos e relíquias</h2>
+    <table class="temples">
+      <tr><th>Deus</th><th>Casa</th><th>Ação do templo</th><th>Relíquia</th></tr>
+      ${GODS.map((g, r) => `<tr><td><b>${g.name}</b><br><small>${ELEMENT_NAME[g.element]}</small></td><td>${pad(r * 8 + 3)}</td><td>${g.action.label}<br><small>${g.action.cost === 0 ? 'Gratuito' : `${g.action.cost} ${g.action.res === 'favor' ? 'Favores' : 'Dracmas'}`}</small></td><td>${g.relic.name} <small>(${g.relic.price})</small><br><small>${g.relic.text}</small></td></tr>`).join('')}
+    </table>`;
 }
 
 // ---------- Partida ----------
 
-const LEGEND: HouseType[] = ['oferenda', 'tributo', 'nemesis', 'moiras', 'fortuna', 'visao', 'purificacao', 'tentacao', 'iris', 'duelo'];
-
-function renderGame(): void {
+function startGame(): void {
+  selected = null;
+  seenBy = -1;
   app.innerHTML = `
     <div class="game">
       <aside class="panel left">
-        <header><h1>ASTRAL</h1><span id="round"></span></header>
+        <header><h1>Ascensão ao Olimpo</h1></header>
         <div id="players"></div>
-        <h2>Casas</h2>
-        <ul class="legend">
-          <li><span class="temple-chip">${glyph(0)}</span><div><b>Templo</b> ${HOUSE_INFO.templo.text}</div></li>
-          ${LEGEND.map((t) => `<li>${iconSvg(t)}<div><b>${HOUSE_INFO[t].name}</b> ${HOUSE_INFO[t].text}</div></li>`).join('')}
-        </ul>
-        <button id="quit" class="ghost">Abandonar partida</button>
+        <div class="left-buttons"><button id="help">Regras e casas</button><button id="quit" class="ghost">Sair</button></div>
       </aside>
       <main class="board-wrap">${boardSvg()}</main>
       <aside class="panel right">
-        <div id="hand"></div>
+        <div id="side"></div>
         <div id="destiny"></div>
         <h2>Crônica</h2>
         <ol id="log"></ol>
@@ -112,139 +143,250 @@ function renderGame(): void {
       <div id="overlay" hidden></div>
     </div>`;
   app.querySelector('#quit')!.addEventListener('click', renderSetup);
+  app.querySelector('#help')!.addEventListener('click', () => {
+    const overlay = app.querySelector<HTMLDivElement>('#overlay')!;
+    overlay.hidden = false;
+    overlay.innerHTML = `<div class="modal"><button id="close" class="primary">Fechar</button>${rulesHtml()}</div>`;
+    overlay.querySelector('#close')!.addEventListener('click', () => (overlay.hidden = true));
+  });
   update();
 }
 
-function viewer(): Player {
-  const p = currentPlayer(game);
-  if (!p.isAI) lastHuman = p.id;
-  return game.players[lastHuman].isAI ? p : game.players[lastHuman];
+function send(cmd: Command): void {
+  try {
+    apply(game, cmd);
+  } catch (e) {
+    console.warn(e);
+  }
+  selected = null;
+  sandals = 0;
+  picks = [];
+  update();
 }
+const answer = (value: Answer): void => send({ type: 'ANSWER', value });
+
+const humans = (): Player[] => game.players.filter((p) => !p.isAI);
+const actorId = (): number => (game.pending ? game.pending.player : game.current);
 
 function playersHtml(): string {
-  return game.players
-    .map((p) => {
-      const sign = SIGNS[p.sign];
-      const active = p.id === game.current && game.phase !== 'over';
-      return `
-      <div class="player ${active ? 'active' : ''}">
-        <div class="player-head">
-          <span class="swatch" style="background:${PLAYER_COLORS[p.id]}"></span>
-          <b>${esc(p.name)}</b>${p.isAI ? '<span class="tag">IA</span>' : ''}${p.jail > 0 ? `<span class="tag jail">Tártaro ${p.jail}</span>` : ''}
-        </div>
-        <div class="player-sign">${glyph(p.sign)} ${sign.name} · ${sign.god} · ${ELEMENT_NAME[sign.element]}</div>
-        <div class="glory" title="Glória"><span style="width:${Math.min(100, (p.gloria / game.goal) * 100)}%"></span><em>Glória ${p.gloria}/${game.goal}</em></div>
+  const actor = actorId();
+  return game.players.map((p) => {
+    const sign = SIGNS[p.sign];
+    const tags = [
+      p.isAI ? '<span class="tag">IA</span>' : '',
+      game.oracle.holder === p.id ? '<span class="tag gold">Oráculo</span>' : '',
+      p.jailed ? '<span class="tag red">Tártaro</span>' : '',
+      p.shield ? '<span class="tag">Escudo</span>' : '',
+    ].join('');
+    const relics = p.relics.map((r) => `<span class="relic" title="${GODS[r].relic.text}">${GODS[r].relic.name}</span>`).join('');
+    return `
+      <div class="player ${p.id === actor && game.phase !== 'GAME_OVER' ? 'active' : ''}">
+        <div class="player-head"><span class="swatch" style="background:${PLAYER_COLORS[p.id]}"></span><b>${esc(p.name)}</b>${tags}</div>
+        <div class="player-sign">${glyph(p.sign)} ${sign.name} · ${ELEMENT_NAME[sign.element]} · ${GODS[sign.patron].name}</div>
+        <div class="glory"><span style="width:${Math.min(100, (p.gloria / game.goal) * 100)}%"></span><em>Glória ${p.gloria}/${game.goal}</em></div>
         <dl>
           <div><dt>Dracmas</dt><dd>${p.dracmas}</dd></div>
-          <div><dt>Favor</dt><dd>${p.favor}</dd></div>
-          <div class="${p.hubris >= 3 ? 'warn' : ''}"><dt>Húbris</dt><dd>${p.hubris}</dd></div>
+          <div title="Votos na eleição: ${votes(p)}"><dt>Favor</dt><dd>${p.favor}</dd></div>
+          <div class="${p.hubris >= 4 ? 'danger' : p.hubris >= 2 ? 'warn' : ''}"><dt>Húbris</dt><dd>${p.hubris}</dd></div>
           <div><dt>Cartas</dt><dd>${p.hand.length}</dd></div>
         </dl>
+        ${relics ? `<div class="relics">${relics}</div>` : ''}
       </div>`;
-    })
-    .join('');
+  }).join('');
 }
 
-function handHtml(v: Player, myTurn: boolean): string {
-  const p = currentPlayer(game);
-  let hint = '';
-  let buttons = '';
-  if (game.phase === 'over') hint = 'A partida terminou.';
-  else if (!myTurn) hint = `Vez de ${esc(p.name)}…`;
-  else if (game.phase === 'jail') {
-    hint = `Você está no Tártaro (${p.jail} turno${p.jail > 1 ? 's' : ''} de pena).`;
-    buttons = `<button data-act="pay" class="primary" ${p.dracmas < RULES.bail ? 'disabled' : ''}>Pagar fiança (${RULES.bail} dracmas)</button><button data-act="serve">Cumprir pena</button>`;
-  } else if (game.phase === 'move') {
-    hint = selected === null ? 'Escolha uma carta para andar.' : 'Agora escolha o destino destacado no mapa.';
-  } else {
-    hint = `Você está no Templo de ${SIGNS[NODES[p.pos].sector].god}: jogue uma carta ou passe.`;
-    buttons = '<button data-act="pass">Passar a vez</button>';
+function cardHtml(id: number, viewer: Player, extra = '', cls = ''): string {
+  const c = CARDS[id];
+  const cost = costFor(viewer, c);
+  return `
+    <div class="card ${cls}" data-card="${id}">
+      <div class="card-top"><span class="mv" title="Movimento">${c.move}</span><span class="rank">${cardName(c)}</span><span class="cost ${cost < c.cost ? 'discount' : ''}" title="Custo do efeito em Dracmas">${cost}</span></div>
+      <div class="card-use use-${c.use}">${useLabel(c)}</div>
+      <div class="card-text">${c.text}</div>
+      ${extra}
+    </div>`;
+}
+
+function destinyHtml(id: number): string {
+  const d = DESTINIES[id];
+  return `<div class="destiny"><span>${d.numeral}</span><div><b>${d.name}</b>${d.text}</div></div>`;
+}
+
+const POWER_LABEL: Record<FreePower, string> = {
+  vision: 'Visão Profética (ver 3 do Destino)',
+  weave: 'Tecelagem (reorganizar 3 do Destino, 2 Favores)',
+  lira: 'Lira de Apolo (ver a próxima do Destino)',
+  taca: 'Taça de Dionísio (−1 Húbris, +2 Dracmas)',
+  raio: 'Raio de Zeus (+3 Glórias, +2 Húbris)',
+};
+
+function decisionHtml(pending: Pending, me: Player): string {
+  let body = '';
+  switch (pending.kind) {
+    case 'choice':
+      body = pending.options!.map((o, i) => `<button data-answer="${i}" ${o.disabled ? 'disabled' : ''}>${o.label}</button>`).join('');
+      break;
+    case 'target':
+      body = pending.players!.map((id) => {
+        const p = game.players[id];
+        return `<button data-answer="${id}"><span class="swatch" style="background:${PLAYER_COLORS[id]}"></span> ${esc(p.name)} <small>${p.gloria} Glória · ${p.dracmas} Dracmas · ${p.favor} Favor</small></button>`;
+      }).join('');
+      break;
+    case 'bid':
+      body = `<div class="bids">${Array.from({ length: pending.max! + 1 }, (_, i) => `<button data-answer="${i}">${i}</button>`).join('')}</div><p class="hint">Os dois lances são revelados juntos e ambos são gastos.</p>`;
+      break;
+    case 'dest':
+      body = '<p class="hint">Clique em uma das casas destacadas no mapa.</p>';
+      break;
+    case 'discard':
+      body = `<div class="cards">${pending.cards!.map((id) => cardHtml(id, me, '', `pickable ${picks.includes(id) ? 'selected' : ''}`)).join('')}</div><button id="confirm" class="primary" ${picks.length === pending.count ? '' : 'disabled'}>Descartar (${picks.length}/${pending.count})</button>`;
+      break;
+    case 'pickCard':
+      body = `<div class="cards">${pending.cards!.map((id) => cardHtml(id, me, '', 'pickable')).join('')}</div>`;
+      break;
+    case 'reorder':
+    case 'view': {
+      const can = pending.kind === 'reorder';
+      const rows = order.map((id, i) => {
+        const arrows = can ? `<span class="arrows"><button data-up="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Subir">▲</button><button data-down="${i}" ${i === order.length - 1 ? 'disabled' : ''} aria-label="Descer">▼</button></span>` : '';
+        const content = pending.deck === 'destiny' ? destinyHtml(id) : `<div class="destiny"><span>${CARDS[id].move}</span><div><b>${cardName(CARDS[id])}</b>${CARDS[id].text}</div></div>`;
+        return `<div class="peek-row">${arrows}${content}</div>`;
+      }).join('');
+      body = `${rows}<button id="confirm" class="primary">${can ? 'Confirmar ordem' : 'Entendi'}</button>`;
+      break;
+    }
   }
-  const suit = ELEMENT_SUIT[SIGNS[v.sign].element];
-  const cards = v.hand
-    .map((id) => {
-      const c = CARDS[id];
-      const cost = costFor(v, c);
-      const playable = myTurn && canPlay(game, v, id);
-      const cls = ['card', id === selected ? 'selected' : '', playable ? 'playable' : '', myTurn && game.phase === 'move' ? 'movable' : ''].join(' ');
-      return `
-      <div class="${cls}" data-card="${id}">
-        <div class="card-top"><span class="mv" title="Movimento">${c.move}</span><span class="rank">${cardName(c)}</span><span class="cost ${c.suit === suit ? 'discount' : ''}" title="Custo em dracmas">${cost}</span></div>
-        <div class="card-title">${c.title}</div>
-        <div class="card-god">${glyph(c.sector)} Templo de ${SIGNS[c.sector].god}</div>
-        <div class="card-text">${cardText(c)}</div>
-        ${playable ? `<button data-play="${id}" class="primary">Jogar</button>` : ''}
-      </div>`;
-    })
-    .join('');
-  return `<h2>Mão de ${esc(v.name)}</h2><p class="hint">${hint}</p><div class="buttons">${buttons}</div><div class="cards">${cards}</div>`;
+  return `<div class="decision"><h2>Decisão de ${esc(me.name)}</h2><p class="prompt">${esc(pending.prompt)}</p>${body}</div>`;
+}
+
+function actionHtml(p: Player): string {
+  const node = NODES[p.pos];
+  const here = node.type === 'templo' ? `Templo de ${GODS[node.region].name}` : `${HOUSE_INFO[node.type].name}, região de ${GODS[node.region].name}`;
+  const buttons: string[] = [];
+  if (node.type === 'templo') {
+    const god = GODS[node.region];
+    buttons.push(`<button data-cmd="TEMPLE_ACTION" ${canTempleAction(game) ? '' : 'disabled'} title="Uma vez por rodada">Templo: ${god.action.label}</button>`);
+    if (game.stock[node.region]) buttons.push(`<button data-cmd="BUY_RELIC" ${canBuyRelic(game) ? '' : 'disabled'} title="${god.relic.text}">Comprar ${god.relic.name} (${god.relic.price})</button>`);
+  }
+  for (const power of freePowers(game)) buttons.push(`<button data-power="${power}" class="free">${POWER_LABEL[power]}</button>`);
+  buttons.push('<button data-cmd="END_TURN" class="ghost">Encerrar turno sem agir</button>');
+  const sandalsUi = canUseSandals(game)
+    ? `<div class="sandals">Sandálias de Hermes: ${([-1, 0, 1] as const).map((m) => `<button data-sandals="${m}" class="${sandals === m ? 'on' : ''}">${m > 0 ? '+1' : m < 0 ? '−1' : '0'}</button>`).join('')}</div>`
+    : '';
+  const hint = selected === null ? 'Clique em uma carta para mover, ou use um efeito.' : 'Escolha no mapa a casa de destino destacada.';
+  const cards = p.hand.map((id) => {
+    const can = canEffect(game, id);
+    return cardHtml(id, p, `<button data-effect="${id}" ${can ? 'class="primary"' : 'disabled'}>Usar efeito</button>`, `movable ${id === selected ? 'selected' : ''}`);
+  }).join('');
+  return `<h2>Turno de ${esc(p.name)}</h2><p class="where">Casa ${pad(p.pos)} · ${here}</p><p class="hint">${hint}</p>${sandalsUi}<div class="buttons">${buttons.join('')}</div><div class="cards">${cards}</div>`;
+}
+
+function sideHtml(): string {
+  if (game.phase === 'GAME_OVER') return '<h2>Fim de partida</h2>';
+  const actor = game.players[actorId()];
+  if (actor.isAI) {
+    const watcher = humans().length === 1 ? humans()[0] : null;
+    const hand = watcher ? `<h2>Mão de ${esc(watcher.name)}</h2><div class="cards">${watcher.hand.map((id) => cardHtml(id, watcher)).join('')}</div>` : '';
+    return `<p class="waiting">${esc(actor.name)} está jogando…</p>${hand}`;
+  }
+  if (humans().length > 1 && seenBy !== actor.id) {
+    return `<div class="handoff"><h2>Vez de ${esc(actor.name)}</h2><p class="hint">Passe o dispositivo. As cartas e os lances ficam ocultos até a confirmação.</p><button id="ready" class="primary">Sou ${esc(actor.name)}</button></div>`;
+  }
+  return game.pending ? decisionHtml(game.pending, actor) : actionHtml(actor);
 }
 
 function update(): void {
+  store('set', serialize(game));
   const svg = app.querySelector<SVGSVGElement>('#board')!;
-  const p = currentPlayer(game);
-  const v = viewer();
-  const myTurn = game.phase !== 'over' && !p.isAI && v.id === p.id;
-  if (!myTurn || game.phase !== 'move') selected = null;
+  const pending = game.pending;
+  if (pending && (pending.kind === 'reorder' || pending.kind === 'view') && orderFor !== pending) {
+    order = [...pending.cards!];
+    orderFor = pending;
+  }
 
-  app.querySelector('#round')!.textContent = `Rodada ${game.round}`;
   app.querySelector('#players')!.innerHTML = playersHtml();
-  app.querySelector('#hand')!.innerHTML = handHtml(v, myTurn);
-  const destiny = game.lastDestiny === null ? null : DESTINIES[game.lastDestiny];
-  app.querySelector('#destiny')!.innerHTML = destiny
-    ? `<div class="destiny"><span>${destiny.numeral}</span><div><b>${destiny.name}</b>${destiny.text}</div></div>`
-    : '';
+  app.querySelector('#side')!.innerHTML = sideHtml();
+  app.querySelector('#destiny')!.innerHTML = game.lastDestiny === null ? '' : `<h2>Último Destino</h2>${destinyHtml(game.lastDestiny)}`;
   const log = app.querySelector('#log')!;
-  log.innerHTML = game.log
-    .slice(-40)
-    .map((e) => `<li>${e.player === null ? '' : `<span class="swatch" style="background:${PLAYER_COLORS[e.player]}"></span>`}${esc(e.text)}</li>`)
-    .join('');
+  log.innerHTML = game.log.slice(-50).map((e) => `<li>${e.player === null ? '' : `<span class="swatch" style="background:${PLAYER_COLORS[e.player]}"></span>`}${esc(e.text)}</li>`).join('');
   log.scrollTop = log.scrollHeight;
 
+  const oracle = game.oracle.holder;
+  svg.querySelector('#summit-round')!.textContent = `Rodada ${game.round}`;
+  svg.querySelector('#summit-oracle')!.textContent = oracle === null ? 'Oráculo: vago' : `Oráculo: ${game.players[oracle].name}`;
+  const left = RULES.electionEvery - ((game.round - 1) % RULES.electionEvery);
+  svg.querySelector('#summit-next')!.textContent = left === 1 ? 'Eleição ao fim desta rodada' : `Eleição em ${left} rodadas`;
   updateTokens(svg, game);
-  const dests = selected !== null ? [...moveOptions(game, selected).keys()] : [];
-  showHighlights(svg, dests, (dest) => {
-    moveWithCard(game, selected!, dest);
-    selected = null;
+
+  const actor = game.players[actorId()];
+  const mine = game.phase !== 'GAME_OVER' && !actor.isAI && (humans().length === 1 || seenBy === actor.id);
+  let dests: number[] = [];
+  let onPick: (d: number) => void = () => {};
+  if (mine && pending?.kind === 'dest') {
+    dests = pending.nodes!;
+    onPick = (d) => answer(d);
+  } else if (mine && !pending && selected !== null) {
+    const card = selected;
+    const mod = sandals;
+    dests = [...moveOptions(game, card, mod).keys()];
+    onPick = (d) => send({ type: 'PLAY_CARD_MOVE', card, dest: d, mod });
+  }
+  showHighlights(svg, dests, onPick);
+
+  const side = app.querySelector<HTMLDivElement>('#side')!;
+  side.querySelector('#ready')?.addEventListener('click', () => {
+    seenBy = actor.id;
     update();
   });
-
-  app.querySelectorAll<HTMLElement>('.card.movable').forEach((el) => {
-    el.addEventListener('click', () => {
-      const id = Number(el.dataset.card);
-      selected = selected === id ? null : id;
-      update();
-    });
-  });
-  app.querySelectorAll<HTMLButtonElement>('[data-play]').forEach((el) => {
-    el.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      playCard(game, Number(el.dataset.play));
-      update();
-    });
-  });
-  app.querySelectorAll<HTMLButtonElement>('[data-act]').forEach((el) => {
-    el.addEventListener('click', () => {
-      if (el.dataset.act === 'pass') pass(game);
-      else jailChoice(game, el.dataset.act as 'pay' | 'serve');
-      update();
-    });
+  side.querySelectorAll<HTMLElement>('.card.movable').forEach((el) => el.addEventListener('click', () => {
+    const id = Number(el.dataset.card);
+    selected = selected === id ? null : id;
+    update();
+  }));
+  side.querySelectorAll<HTMLButtonElement>('[data-effect]').forEach((el) => el.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    send({ type: 'PLAY_CARD_EFFECT', card: Number(el.dataset.effect) });
+  }));
+  side.querySelectorAll<HTMLButtonElement>('[data-cmd]').forEach((el) => el.addEventListener('click', () => send({ type: el.dataset.cmd as 'TEMPLE_ACTION' | 'BUY_RELIC' | 'END_TURN' })));
+  side.querySelectorAll<HTMLButtonElement>('[data-power]').forEach((el) => el.addEventListener('click', () => send({ type: 'FREE_POWER', power: el.dataset.power as FreePower })));
+  side.querySelectorAll<HTMLButtonElement>('[data-sandals]').forEach((el) => el.addEventListener('click', () => {
+    sandals = Number(el.dataset.sandals) as -1 | 0 | 1;
+    update();
+  }));
+  side.querySelectorAll<HTMLButtonElement>('[data-answer]').forEach((el) => el.addEventListener('click', () => answer(Number(el.dataset.answer))));
+  side.querySelectorAll<HTMLElement>('.card.pickable').forEach((el) => el.addEventListener('click', () => {
+    const id = Number(el.dataset.card);
+    if (pending?.kind === 'pickCard') return answer(id);
+    picks = picks.includes(id) ? picks.filter((c) => c !== id) : picks.length < pending!.count! ? [...picks, id] : picks;
+    update();
+  }));
+  const swap = (i: number, j: number): void => {
+    [order[i], order[j]] = [order[j], order[i]];
+    update();
+  };
+  side.querySelectorAll<HTMLButtonElement>('[data-up]').forEach((el) => el.addEventListener('click', () => swap(Number(el.dataset.up), Number(el.dataset.up) - 1)));
+  side.querySelectorAll<HTMLButtonElement>('[data-down]').forEach((el) => el.addEventListener('click', () => swap(Number(el.dataset.down), Number(el.dataset.down) + 1)));
+  side.querySelector('#confirm')?.addEventListener('click', () => {
+    if (pending?.kind === 'discard') answer(picks);
+    else if (pending?.kind === 'reorder') answer(order);
+    else answer(null);
   });
 
   const overlay = app.querySelector<HTMLDivElement>('#overlay')!;
-  if (game.phase === 'over' && game.winner !== null) {
+  if (game.phase === 'GAME_OVER' && game.winner !== null) {
+    store('clear');
     const w = game.players[game.winner];
     overlay.hidden = false;
-    overlay.innerHTML = `<div class="victory"><div class="big">${glyph(w.sign)}</div><h2>${esc(w.name)} ascendeu ao Olimpo</h2><p>${w.gloria} de Glória em ${game.round} rodadas, sob a proteção de ${SIGNS[w.sign].god}.</p><button id="again" class="primary">Nova partida</button></div>`;
+    overlay.innerHTML = `<div class="victory"><div class="big">${glyph(w.sign)}</div><h2>${esc(w.name)} ascendeu ao Olimpo</h2><p>${w.gloria} de Glória em ${game.round} rodadas, sob a proteção de ${GODS[SIGNS[w.sign].patron].name}.</p><button id="again" class="primary">Nova partida</button></div>`;
     overlay.querySelector('#again')!.addEventListener('click', renderSetup);
   }
 
-  window.clearTimeout(aiTimer);
-  if (game.phase !== 'over' && currentPlayer(game).isAI) {
-    aiTimer = window.setTimeout(() => {
+  window.clearTimeout(timer);
+  if (game.phase !== 'GAME_OVER' && actor.isAI) {
+    timer = window.setTimeout(() => {
       aiStep(game);
       update();
-    }, AI_DELAY);
+    }, pending ? 350 : 900);
   }
 }
 
