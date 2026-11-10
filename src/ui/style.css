@@ -9,6 +9,7 @@
   --cream: #efdcb2;
   --muted: #c9b089;
   --gold: #e3b341;
+  --bronze: #b08d57;
   --red: #c0392b;
   font-family: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
   color: var(--cream);
@@ -50,8 +51,8 @@ small { color: var(--muted); }
 .legend li { display: flex; gap: 0.45rem; align-items: flex-start; }
 .legend b { color: var(--cream); display: block; }
 .house-chip { flex: none; }
-.house-chip > circle:first-child { fill: var(--black); stroke: var(--clay); }
-.house-chip text { fill: var(--muted); font-size: 9px; text-anchor: middle; }
+.house-chip > circle:first-child { fill: var(--black); stroke: var(--bronze); }
+.house-chip text { text-anchor: middle; }
 .temples { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 .temples th { text-align: left; color: var(--clay-light); font-weight: normal; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.08em; }
 .temples td, .temples th { border-bottom: 1px solid var(--line); padding: 0.3rem 0.4rem; vertical-align: top; }
@@ -156,7 +157,20 @@ small { color: var(--muted); }
 .summit-title { font-family: Cinzel, Georgia, serif; fill: var(--gold); font-size: 22px; letter-spacing: 6px; }
 .summit-info { fill: var(--cream); font-size: 15px; }
 .summit-small { fill: var(--muted); font-size: 11.5px; }
-.node > circle:first-of-type { fill: var(--black); }
+.node > circle:first-of-type { fill: var(--black); stroke: var(--bronze); stroke-width: 1.8; }
+.icon .solid { fill: var(--cream); stroke: none; }
+.icon .thick { stroke-width: 3.2; }
+.sym { fill: var(--cream); font-family: Cinzel, Georgia, serif; font-size: 17px; font-weight: 700; stroke: none; text-anchor: middle; }
+.badge circle { fill: var(--gold); stroke: var(--black); stroke-width: 1; }
+.badge text { fill: var(--black); font-size: 8.5px; font-weight: bold; }
+.pedagio .badge circle { fill: #ff8a6b; }
+.gloria .icon .solid, .tesouro .icon .solid { fill: var(--gold); }
+.pedagio .icon, .provacao .sym { stroke: #ff8a6b; }
+.provacao .sym { fill: #ff8a6b; stroke: none; }
+.destino .sym { fill: var(--gold); }
+.routes { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.5rem; }
+.routes button { border-color: var(--gold); font-size: 0.8rem; padding: 0.3rem 0.55rem; }
+.routes small { display: block; }
 .node .ring { fill: none; stroke: var(--gold); stroke-width: 1.6; }
 .node text { text-anchor: middle; pointer-events: none; }
 .abbr { fill: var(--gold); font-family: Cinzel, Georgia, serif; font-size: 11.5px; font-weight: 700; letter-spacing: 0.5px; }
@@ -165,8 +179,8 @@ small { color: var(--muted); }
 .icon .dot { fill: var(--cream); stroke: none; }
 .gloria .icon { stroke: var(--gold); }
 .nemesis .icon, .tartaro .icon { stroke: #ff8a6b; }
-.node.tartaro > circle:first-of-type, .node.delfos > circle:first-of-type { stroke: var(--gold); stroke-width: 2; }
-.node.tartaro > circle:first-of-type { stroke: #ff8a6b; }
+.node.delfos > circle:first-of-type { stroke: var(--gold); stroke-width: 2.4; }
+.node.tartaro > circle:first-of-type { stroke: #ff8a6b; stroke-width: 2.4; }
 .node.bifurcacao .icon { stroke: var(--gold); }
 .dest { fill: rgba(239, 220, 178, 0.3); stroke: var(--cream); stroke-width: 3.5; stroke-dasharray: 7 5; cursor: pointer; animation: spin 6s linear infinite; }
 .dest:hover { fill: rgba(239, 220, 178, 0.6); }

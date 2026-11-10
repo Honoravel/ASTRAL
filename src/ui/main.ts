@@ -1,5 +1,5 @@
 import { aiStep } from '../engine/ai';
-import { HOUSE_INFO, NODES } from '../engine/board';
+import { HOUSES, NODES } from '../engine/board';
 import { cardName, CARDS, useLabel } from '../engine/cards';
 import { ELEMENT_NAME, glyph, GODS, SIGNS } from '../engine/data';
 import { DESTINIES } from '../engine/destiny';
@@ -100,20 +100,23 @@ function renderSetup(): void {
 }
 
 function rulesHtml(): string {
-  const houses: HouseType[] = ['comum', 'dracmas', 'favor', 'gloria', 'evento', 'destino', 'nemesis', 'bifurcacao', 'delfos', 'tartaro'];
+  const houses: HouseType[] = ['comum', 'dracmas', 'pedagio', 'tesouro', 'favor', 'altar', 'gloria', 'provacao', 'evento', 'destino', 'nemesis', 'bifurcacao', 'delfos', 'tartaro'];
   return `
     <h2>Como jogar</h2>
     <ol class="how">
       <li>Vence quem chegar primeiro a <b>${RULES.goal} de Glória</b>. No início do turno a mão volta a 6 cartas.</li>
       <li>Cada turno tem <b>uma ação principal</b>: <b>mover</b> (descarta a carta e anda exatamente o movimento dela), <b>usar o efeito</b> de uma carta (paga o custo e não se move), fazer a <b>ação do templo</b> ou <b>comprar a relíquia</b> do templo onde está.</li>
       <li>Efeitos <b>universais</b> valem em qualquer casa; <b>elementais</b>, só em templo do elemento da carta; <b>divinos</b>, só no templo do deus indicado.</li>
-      <li>Só a casa onde você <b>termina</b> o movimento é ativada. Ao parar em templo, escolha: ação do templo (1 vez por rodada), relíquia ou nada.</li>
+      <li>O <b>caminho importa</b>: cada casa atravessada aplica seu efeito de <b>passagem</b> (ganhar ou pagar Dracmas, fiscalização de Nêmesis) e a última aplica só o efeito de <b>parada</b>. Ao parar em templo, escolha: ação do templo (1 vez por rodada), relíquia ou nada.</li>
       <li>Ao parar em casa ocupada, você pode desafiar para um <b>duelo</b>: cada um aposta de 0 a 3 Favores em segredo.</li>
       <li>A cada ${RULES.electionEvery} rodadas há <b>eleição do Oráculo</b>: vence quem tiver mais Favor (o Favor não é gasto) e ganha 1 Glória.</li>
       <li><b>Húbris</b> é punida nas casas de Nêmesis e pode levar ao <b>Tártaro</b>, de onde se sai por Penitência, Suborno ou Pacto Sombrio.</li>
     </ol>
     <h2>Casas</h2>
-    <ul class="legend">${houses.map((t) => `<li>${iconSvg(t, t === 'comum' ? '00' : '')}<div><b>${HOUSE_INFO[t].name}</b> ${HOUSE_INFO[t].text}</div></li>`).join('')}</ul>
+    <table class="temples">
+      <tr><th></th><th>Casa</th><th>Passagem</th><th>Parada</th></tr>
+      ${houses.map((t) => `<tr><td>${iconSvg(t, t === 'comum' ? '00' : '')}</td><td><b>${HOUSES[t].name}</b></td><td>${HOUSES[t].pass || '—'}</td><td>${HOUSES[t].stop}</td></tr>`).join('')}
+    </table>
     <h2>Templos e relíquias</h2>
     <table class="temples">
       <tr><th>Deus</th><th>Casa</th><th>Ação do templo</th><th>Relíquia</th></tr>
@@ -261,7 +264,7 @@ function decisionHtml(pending: Pending, me: Player): string {
 
 function actionHtml(p: Player): string {
   const node = NODES[p.pos];
-  const here = node.type === 'templo' ? `Templo de ${GODS[node.region].name}` : `${HOUSE_INFO[node.type].name}, região de ${GODS[node.region].name}`;
+  const here = node.type === 'templo' ? `Templo de ${GODS[node.region].name}` : `${HOUSES[node.type].name}, região de ${GODS[node.region].name}`;
   const buttons: string[] = [];
   if (node.type === 'templo') {
     const god = GODS[node.region];
@@ -273,12 +276,17 @@ function actionHtml(p: Player): string {
   const sandalsUi = canUseSandals(game)
     ? `<div class="sandals">Sandálias de Hermes: ${([-1, 0, 1] as const).map((m) => `<button data-sandals="${m}" class="${sandals === m ? 'on' : ''}">${m > 0 ? '+1' : m < 0 ? '−1' : '0'}</button>`).join('')}</div>`
     : '';
-  const hint = selected === null ? 'Clique em uma carta para mover, ou use um efeito.' : 'Escolha no mapa a casa de destino destacada.';
+  const hint = selected === null ? 'Clique em uma carta para mover, ou use um efeito.' : 'Escolha a rota abaixo ou clique no destino destacado no mapa.';
+  const routes = selected === null ? '' : `<div class="routes">${[...moveOptions(game, selected, sandals)].map(([dest, path]) => {
+    const passes = path.slice(0, -1).filter((n) => NODES[n].onPass.length > 0).map((n) => `${HOUSES[NODES[n].type].pass} <small>(${pad(n)})</small>`);
+    const stop = NODES[dest].type === 'templo' ? `Templo de ${GODS[NODES[dest].region].name}` : HOUSES[NODES[dest].type].name;
+    return `<button data-route="${dest}"><b>Casa ${pad(dest)} · ${stop}</b><small>Caminho: ${passes.length ? passes.join(' · ') : 'sem efeitos'}</small></button>`;
+  }).join('')}</div>`;
   const cards = p.hand.map((id) => {
     const can = canEffect(game, id);
     return cardHtml(id, p, `<button data-effect="${id}" ${can ? 'class="primary"' : 'disabled'}>Usar efeito</button>`, `movable ${id === selected ? 'selected' : ''}`);
   }).join('');
-  return `<h2>Turno de ${esc(p.name)}</h2><p class="where">Casa ${pad(p.pos)} · ${here}</p><p class="hint">${hint}</p>${sandalsUi}<div class="buttons">${buttons.join('')}</div><div class="cards">${cards}</div>`;
+  return `<h2>Turno de ${esc(p.name)}</h2><p class="where">Casa ${pad(p.pos)} · ${here}</p><p class="hint">${hint}</p>${sandalsUi}${routes}<div class="buttons">${buttons.join('')}</div><div class="cards">${cards}</div>`;
 }
 
 function sideHtml(): string {
@@ -343,6 +351,7 @@ function update(): void {
     selected = selected === id ? null : id;
     update();
   }));
+  side.querySelectorAll<HTMLButtonElement>('[data-route]').forEach((el) => el.addEventListener('click', () => onPick(Number(el.dataset.route))));
   side.querySelectorAll<HTMLButtonElement>('[data-effect]').forEach((el) => el.addEventListener('click', (ev) => {
     ev.stopPropagation();
     send({ type: 'PLAY_CARD_EFFECT', card: Number(el.dataset.effect) });

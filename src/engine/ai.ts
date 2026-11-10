@@ -35,6 +35,7 @@ function opsValue(state: GameState, me: number, ops: Op[]): number {
       case 'jail': v -= op.p === me ? 9 : -4; break;
       case 'endTurn': v -= 5; break;
       case 'buy': v += 3; break;
+      case 'altar': v += 1.5 - op.bet; break;
       case 'shield': v += 2; break;
       case 'peek': v += 0.3; break;
       case 'advance': case 'teleport': v += 1; break;

@@ -1,6 +1,7 @@
 # Ascensão ao Olimpo
 
-Protótipo web do jogo de tabuleiro descrito na *Especificação consolidada de mecânicas v1.5*:
+Protótipo web do jogo de tabuleiro descrito na *Especificação consolidada de mecânicas v1.5*,
+com o *Sistema de casas v1.6* (efeitos de passagem e de parada):
 2 a 4 jogadores (humanos no mesmo dispositivo e/ou IA) disputam a ascensão divina.
 Vence quem primeiro chegar a **20 de Glória**.
 
@@ -23,7 +24,8 @@ Outros comandos:
 ## Estrutura
 
 - `src/engine/`: regras em TypeScript puro, sem dependência de navegador. É a parte a portar para Godot.
-  - `board.ts`: 96 casas, bifurcações e validação da tabela de tipos.
+  - `config.ts`: todos os valores ajustáveis (recursos iniciais, casas, tabelas de dados).
+  - `board.ts`: 96 casas com `onPass`/`onStop`, bifurcações e validação da tabela de tipos.
   - `cards.ts`: 56 Arcanos Menores e seus efeitos. `destiny.ts`: 22 Arcanos Maiores.
   - `data.ts`: deuses, ações de templo, relíquias e signos.
   - `game.ts`: fila de efeitos, comandos (`apply`), Tártaro, Oráculo, relíquias, duelos, salvar/carregar.
@@ -36,12 +38,37 @@ Humanos e IA usam a mesma API: `apply(state, command)`. Os comandos são
 saída do Tártaro, substituição de relíquia, lance de duelo). A rota do movimento é escolhida pelo
 destino: como cada bifurcação leva a casas distintas, o destino define o caminho.
 
+## Movimento (v1.6)
+
+Uma carta de movimento percorre exatamente o seu valor. Cada casa intermediária aplica o efeito de
+**passagem**, na ordem do caminho, e a última aplica só o efeito de **parada**. A casa inicial não é
+ativada e teletransportes não ativam nada. O resultado fica em `state.lastMove`
+(`path`, `passedNodes`, `destination`, `events`).
+
+| Casa | Qtde. | Passagem | Parada |
+|---|---|---|---|
+| Comum | 12 | — | — |
+| Dracmas | 10 | +1 Dracma | +2 Dracmas |
+| Pedágio divino | 8 | −1 Dracma | −2 Dracmas |
+| Tesouro | 4 | — | +2 a 5 Dracmas |
+| Favor | 8 | — | +2 Favores |
+| Altar | 6 | — | Aposta 1–3 Dracmas, 1d6: 1–2 nada · 3–4 +1 Favor · 5–6 +2 Favores |
+| Glória | 6 | — | +1 Glória |
+| Provação | 6 | — | 1d6 de risco |
+| Evento | 6 | — | 1d6 de evento menor |
+| Destino | 6 | — | Revela Arcano Maior |
+| Nêmesis | 4 | Com Húbris ≥ 4: −1 Dracma | Julgamento |
+| Bifurcação | 6 | Escolha de rota | — |
+| Templo | 12 | — | Ação divina, relíquia ou nada |
+| Delfos | 1 | — | Consultar o Destino |
+| Tártaro | 1 | — | Entrada comum, sem prisão |
+
+Pedágio (ou fiscalização de Nêmesis) sem saldo: paga o que tiver e ganha 1 Húbris, uma vez por casa.
+
 ## Regras presumidas (não especificadas na v1.5)
 
 Decididas com o autor:
 
-- Casas: Comum sem efeito; Dracmas +2; Favor +1; Glória +1; Evento rola 1d6
-  (1 −2 Dracmas · 2 +1 Húbris · 3 +2 Dracmas · 4 compra 1 carta · 5 +1 Favor · 6 +1 Glória).
 - Cada signo tem um deus patrono do seu elemento e o jogador começa no templo dele.
 - O jogador escolhe alvos e opções; a IA decide por heurística.
 
@@ -50,7 +77,12 @@ Presumidas na implementação, a confirmar:
 - Tabela signo–patrono: Áries–Ares, Touro–Hera, Gêmeos–Hermes, Câncer–Afrodite, Leão–Zeus,
   Virgem–Deméter, Libra–Atena, Escorpião–Dionísio, Sagitário–Hefesto, Capricórnio–Ártemis,
   Aquário–Apolo, Peixes–Poseidon. O patrono só define a casa inicial.
-- Parar numa casa de Bifurcação ou na casa 52 (Tártaro) por movimento não tem efeito.
+- Modelo econômico: **equilibrado** (a opção recomendada na v1.6), ainda não confirmado.
+- Altar: o jogador pode desistir de apostar. Como está escrito, o valor apostado não muda o resultado.
+- Fiscalização de Nêmesis sem saldo dá 1 Húbris, como o pedágio.
+- Arco de Ártemis ignora só efeitos negativos de **parada** (pedágio, Provação, Evento, julgamento).
+- Tridente de Poseidon rende a cada região nova atravessada no caminho (máximo 2 por rodada).
+- A rota é escolhida pelo destino: cada destino tem um único caminho possível neste mapa.
 - Empates de "líder" e "menos Glória": vale o primeiro na ordem do turno a partir do jogador ativo.
   O mesmo vale para a vitória quando dois passam da meta juntos.
 - Baralho vazio: o descarte é reembaralhado. Mão vazia: o jogador pode encerrar o turno sem agir
@@ -64,13 +96,12 @@ Presumidas na implementação, a confirmar:
 - Foice rende no início de cada rodada a partir da segunda; Cinto rende ao fim das rodadas 3, 6, 9…
 - "Teletransportar até N casas adiante" permite ficar onde está.
 
-## Telemetria inicial (IA × IA, meta de 20 Glórias)
+## Telemetria (IA × IA, meta de 20 Glórias, regras v1.6)
 
 | Jogadores | Rodadas (média) | p10–p90 | Duelos/partida | Prisões/jogador | Relíquias/jogador |
 |---|---|---|---|---|---|
-| 2 | 27,0 | 19–33 | 0,3 | 0,01 | 1,1 |
-| 3 | 25,2 | 19–32 | 0,8 | 0,02 | 1,1 |
-| 4 | 23,8 | 18–29 | 1,4 | 0,03 | 1,0 |
+| 2 | 29,9 | 20–42 | 0,2 | 0,02 | 1,1 |
+| 4 | 25,0 | 20–31 | 0,8 | 0,04 | 0,9 |
 
-Comparado à meta da seção 15: as partidas estão mais longas que 12–20 rodadas, há poucos duelos
-e quase nenhuma prisão. A Húbris só é cobrada ao parar em uma das 4 casas de Nêmesis.
+Comparado à meta da seção 15 da v1.5: as partidas seguem mais longas que 12–20 rodadas, com poucos
+duelos e quase nenhuma prisão.

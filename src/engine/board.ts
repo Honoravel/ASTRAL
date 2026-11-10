@@ -1,29 +1,84 @@
-import type { BoardNode, HouseType } from './types';
+import { RULES } from './config';
+import type { BoardNode, EffectDefinition, HouseType } from './types';
 
 export const NODE_COUNT = 96;
 export const TARTARUS = 52;
 export const DELPHI = 68;
 
-/** Tipos e IDs de casas — fonte de verdade da especificação v1.5. */
+/** Tipos e IDs de casas — fonte de verdade da especificação v1.6. */
 const TYPE_IDS: Record<HouseType, number[]> = {
-  comum: [0, 2, 5, 9, 13, 18, 21, 24, 28, 32, 37, 40, 42, 47, 50, 57, 60, 63, 66, 72, 77, 79, 80, 81, 85, 87, 89, 90, 92, 95],
-  dracmas: [1, 12, 20, 31, 39, 49, 58, 71, 78, 84, 88, 94],
+  comum: [0, 2, 5, 9, 13, 18, 21, 24, 28, 32, 37, 40],
+  dracmas: [1, 12, 20, 31, 39, 49, 58, 71, 78, 84],
+  pedagio: [42, 47, 50, 57, 60, 63, 66, 72],
   favor: [4, 16, 23, 34, 41, 55, 61, 74],
-  gloria: [7, 15, 25, 33, 44, 53, 64, 73],
-  evento: [8, 17, 26, 36, 45, 56, 65, 76],
+  gloria: [7, 15, 25, 33, 44, 53],
+  provacao: [77, 79, 80, 81, 85, 87],
   destino: [10, 29, 48, 69, 82, 93],
   nemesis: [14, 30, 46, 62],
   bifurcacao: [6, 22, 38, 54, 70, 86],
   templo: [3, 11, 19, 27, 35, 43, 51, 59, 67, 75, 83, 91],
+  evento: [8, 17, 26, 36, 45, 56],
+  altar: [89, 90, 92, 95, 65, 76],
+  tesouro: [88, 94, 64, 73],
   delfos: [DELPHI],
   tartaro: [TARTARUS],
+};
+
+export interface House {
+  name: string;
+  /** Texto do efeito de passagem ('' = nenhum). */
+  pass: string;
+  stop: string;
+  onPass: EffectDefinition[];
+  onStop: EffectDefinition[];
+}
+
+/** Efeitos de passagem e de parada de cada tipo de casa. */
+export const HOUSES: Record<HouseType, House> = {
+  comum: { name: 'Comum', pass: '', stop: 'Nenhum efeito.', onPass: [], onStop: [] },
+  dracmas: {
+    name: 'Dracmas', pass: `+${RULES.dracmasPass} Dracma`, stop: `+${RULES.dracmasStop} Dracmas`,
+    onPass: [{ k: 'res', res: 'dracmas', n: RULES.dracmasPass }], onStop: [{ k: 'res', res: 'dracmas', n: RULES.dracmasStop }],
+  },
+  pedagio: {
+    name: 'Pedágio divino', pass: `−${RULES.tollPass} Dracma`, stop: `−${RULES.tollStop} Dracmas. Sem saldo: paga o que tiver e ganha ${RULES.tollHubris} Húbris`,
+    onPass: [{ k: 'toll', n: RULES.tollPass }], onStop: [{ k: 'toll', n: RULES.tollStop }],
+  },
+  favor: { name: 'Favor', pass: '', stop: `+${RULES.favorStop} Favores`, onPass: [], onStop: [{ k: 'res', res: 'favor', n: RULES.favorStop }] },
+  gloria: { name: 'Glória', pass: '', stop: `+${RULES.gloriaStop} Glória`, onPass: [], onStop: [{ k: 'res', res: 'gloria', n: RULES.gloriaStop }] },
+  provacao: {
+    name: 'Provação', pass: '', stop: '1d6: 1 +2 Húbris · 2 −2 Dracmas · 3 −1 Favor · 4 +2 Dracmas · 5 +1 Glória · 6 +1 Favor e +1 Dracma',
+    onPass: [], onStop: [{ k: 'roll', table: 'provacao' }],
+  },
+  destino: { name: 'Destino', pass: '', stop: 'Revela um Arcano Maior', onPass: [], onStop: [{ k: 'destiny' }] },
+  nemesis: {
+    name: 'Nêmesis', pass: `Com Húbris ≥ ${RULES.nemesisPassHubris}: −${RULES.nemesisPassToll} Dracma`,
+    stop: 'Julgamento. Húbris 0–1: nada · 2–3: −2 Dracmas · 4–5: paga 4 Dracmas ou Tártaro · 6+: Tártaro',
+    onPass: [{ k: 'hubrisToll', min: RULES.nemesisPassHubris, n: RULES.nemesisPassToll }], onStop: [{ k: 'judgement' }],
+  },
+  bifurcacao: { name: 'Bifurcação', pass: 'Escolha de rota: saída normal ou atalho', stop: 'Nenhum efeito.', onPass: [], onStop: [] },
+  templo: { name: 'Templo', pass: '', stop: 'Ação divina, comprar a relíquia ou nada', onPass: [], onStop: [{ k: 'temple' }] },
+  evento: {
+    name: 'Evento', pass: '', stop: '1d6: 1 −2 Dracmas · 2 +2 Dracmas · 3 +1 Favor · 4 +1 Húbris · 5 −1 Húbris · 6 +1 Glória',
+    onPass: [], onStop: [{ k: 'roll', table: 'evento' }],
+  },
+  altar: {
+    name: 'Altar', pass: '', stop: `Aposte de 1 a ${RULES.altarMaxBet} Dracmas e role 1d6: 1–2 nada · 3–4 +1 Favor · 5–6 +2 Favores`,
+    onPass: [], onStop: [{ k: 'altar' }],
+  },
+  tesouro: {
+    name: 'Tesouro', pass: '', stop: `+${RULES.treasureMin} a ${RULES.treasureMax} Dracmas`,
+    onPass: [], onStop: [{ k: 'treasure', min: RULES.treasureMin, max: RULES.treasureMax }],
+  },
+  delfos: { name: 'Delfos', pass: '', stop: 'Ver 2 cartas do Destino, ou pagar 2 Dracmas por 1 Favor, ou pagar 3 para comprar 2 e descartar 2', onPass: [], onStop: [{ k: 'delphi' }] },
+  tartaro: { name: 'Tártaro', pass: '', stop: 'Entrada comum, sem prisão. A prisão exige condenação.', onPass: [], onStop: [] },
 };
 
 /** Bifurcações: origem → atalho (a saída normal é sempre a casa seguinte). */
 export const SHORTCUTS: Record<number, number> = { 6: 32, 22: 48, 38: 64, 54: 80, 70: 0, 86: 16 };
 
 /** Monta o mapa e rejeita duplicações ou lacunas na tabela de tipos. */
-export function buildBoard(typeIds: Record<HouseType, number[]> = TYPE_IDS): BoardNode[] {
+export function buildBoard(typeIds: Partial<Record<HouseType, number[]>> = TYPE_IDS): BoardNode[] {
   const types = new Array<HouseType | undefined>(NODE_COUNT).fill(undefined);
   for (const [type, ids] of Object.entries(typeIds) as [HouseType, number[]][]) {
     for (const id of ids) {
@@ -46,6 +101,8 @@ export function buildBoard(typeIds: Record<HouseType, number[]> = TYPE_IDS): Boa
       next,
       position: { x: Math.round(radius * Math.cos(angle) * 10) / 10, y: Math.round(radius * Math.sin(angle) * 8.6) / 10 },
       elevation: Math.floor(id / 26),
+      onPass: HOUSES[type].onPass,
+      onStop: HOUSES[type].onStop,
     };
   });
 }
@@ -83,17 +140,3 @@ export const DIST: number[][] = NODES.map((start) => {
   }
   return dist;
 });
-
-export const HOUSE_INFO: Record<HouseType, { name: string; text: string }> = {
-  comum: { name: 'Comum', text: 'Sem efeito.' },
-  dracmas: { name: 'Dracmas', text: 'Ganhe 2 Dracmas.' },
-  favor: { name: 'Favor', text: 'Ganhe 1 Favor.' },
-  gloria: { name: 'Glória', text: 'Ganhe 1 Glória.' },
-  evento: { name: 'Evento', text: 'Role 1d6: 1 −2 Dracmas · 2 +1 Húbris · 3 +2 Dracmas · 4 compre 1 carta · 5 +1 Favor · 6 +1 Glória.' },
-  destino: { name: 'Destino', text: 'Revele um Arcano Maior.' },
-  nemesis: { name: 'Nêmesis', text: 'Húbris 0–1: nada · 2–3: perde até 2 Dracmas · 4–5: paga 4 Dracmas ou Tártaro · 6+: Tártaro.' },
-  bifurcacao: { name: 'Bifurcação', text: 'Sem efeito ao parar. Ao sair, escolha a saída normal ou o atalho.' },
-  templo: { name: 'Templo', text: 'Ao chegar: ação do templo, comprar a relíquia ou nada. Cartas elementais e divinas são jogadas aqui.' },
-  delfos: { name: 'Delfos', text: 'Veja 2 cartas do Destino, ou pague 2 Dracmas por 1 Favor, ou pague 3 para comprar 2 e descartar 2.' },
-  tartaro: { name: 'Tártaro', text: 'Prisão dos condenados. Parar aqui por movimento não tem efeito.' },
-};

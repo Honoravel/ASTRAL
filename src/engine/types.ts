@@ -3,8 +3,31 @@ export type Suit = 'Paus' | 'Copas' | 'Espadas' | 'Ouros';
 export type Res = 'gloria' | 'dracmas' | 'favor' | 'hubris';
 
 export type HouseType =
-  | 'comum' | 'dracmas' | 'favor' | 'gloria' | 'evento' | 'destino'
-  | 'nemesis' | 'bifurcacao' | 'templo' | 'delfos' | 'tartaro';
+  | 'comum' | 'dracmas' | 'pedagio' | 'favor' | 'gloria' | 'provacao' | 'destino' | 'nemesis'
+  | 'bifurcacao' | 'templo' | 'evento' | 'altar' | 'tesouro' | 'delfos' | 'tartaro';
+
+/** Efeito de casa, definido por dados (passagem ou parada). */
+export type EffectDefinition =
+  | { k: 'res'; res: Res; n: number }
+  | { k: 'toll'; n: number }
+  | { k: 'hubrisToll'; min: number; n: number }
+  | { k: 'roll'; table: 'provacao' | 'evento' }
+  | { k: 'treasure'; min: number; max: number }
+  | { k: 'altar' }
+  | { k: 'destiny' }
+  | { k: 'judgement' }
+  | { k: 'temple' }
+  | { k: 'delphi' };
+
+/** Registro do último movimento por carta. */
+export interface MovementResult {
+  player: number;
+  path: number[];
+  passedNodes: number[];
+  destination: number;
+  /** Efeitos de passagem aplicados, em ordem. */
+  events: { node: number; text: string }[];
+}
 
 export interface BoardNode {
   id: number;
@@ -13,6 +36,8 @@ export interface BoardNode {
   next: number[];
   position: { x: number; y: number };
   elevation: number;
+  onPass: EffectDefinition[];
+  onStop: EffectDefinition[];
 }
 
 export interface Card {
@@ -66,6 +91,7 @@ export type Op =
   | { t: 'duel'; a: number; d: number; bidA?: number; bidD?: number }
   | { t: 'payTemple'; p: number; region: number }
   | { t: 'buy'; p: number; relic: number }
+  | { t: 'altar'; p: number; bet: number }
   | { t: 'log'; p: number | null; text: string }
   | { t: 'endTurn' };
 
@@ -139,6 +165,7 @@ export interface GameState {
   goal: number;
   /** Estatísticas para telemetria de balanceamento. */
   stats: { duels: number; jails: number[] };
+  lastMove: MovementResult | null;
   /** Em simulações da IA, a partida para antes de passar a vez. */
   sim?: boolean;
 }

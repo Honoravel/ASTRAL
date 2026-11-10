@@ -1,27 +1,14 @@
 import { COMMON, NODES, reach, TARTARUS, templeOf } from './board';
+import { ALTAR_FAVOR, RULES, TABLES } from './config';
 import { cardName, CARDS, effectOps, T } from './cards';
 import { ELEMENT_SUIT, G, GODS, SIGNS, SUIT_ELEMENT } from './data';
 import { DESTINIES } from './destiny';
 import { d6, rand, shuffle } from './rng';
-import type { Answer, Card, ChoiceOption, Command, FreePower, GameState, Op, Player, PlayerConfig, Res } from './types';
+import type { Answer, Card, ChoiceOption, Command, EffectDefinition, FreePower, GameState, MovementResult, Op, Player, PlayerConfig, Res } from './types';
 
-/** Parâmetros iniciais, sujeitos a testes de balanceamento. */
-export const RULES = {
-  goal: 20,
-  hand: 6,
-  startDracmas: 5,
-  startFavor: 1,
-  maxRelics: 2,
-  electionEvery: 6,
-  bail: 4,
-  nemesisFine: 4,
-  houseDracmas: 2,
-  houseFavor: 1,
-  houseGloria: 1,
-  maxBid: 3,
-};
+export { RULES };
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 const RES_NAME: Record<Res, string> = { gloria: 'Glória', dracmas: 'Dracmas', favor: 'Favor', hubris: 'Húbris' };
 
 export function newGame(configs: PlayerConfig[], seed: number = Date.now() | 0): GameState {
@@ -42,6 +29,7 @@ export function newGame(configs: PlayerConfig[], seed: number = Date.now() | 0):
     queue: [], pending: null, answer: null,
     log: [], winner: null, seed, goal: RULES.goal,
     stats: { duels: 0, jails: configs.map(() => 0) },
+    lastMove: null,
   };
   state.deck = shuffle(state, CARDS.map((c) => c.id));
   state.destiny = shuffle(state, DESTINIES.map((d) => d.id));
@@ -290,80 +278,146 @@ function destinyOps(state: GameState, id: number, a: number, exempt: number): Op
   }
 }
 
-// ---------- chegada em casas ----------
+// ---------- casas: passagem e parada ----------
 
+const pad = (id: number): string => String(id).padStart(2, '0');
+
+/** Paga até `n` Dracmas; sem saldo suficiente, paga o que tiver e ganha Húbris. Devolve o texto do ocorrido. */
+function toll(p: Player, n: number): string {
+  const paid = -change(p, 'dracmas', -n);
+  if (paid === n) return `−${n} Dracma${n > 1 ? 's' : ''}`;
+  change(p, 'hubris', RULES.tollHubris);
+  return `paga ${paid} de ${n} Dracmas e ganha ${RULES.tollHubris} Húbris`;
+}
+
+/** Efeito de passagem de uma casa (sempre automático). Devolve o texto, ou '' se nada ocorreu. */
+function passEffect(p: Player, def: EffectDefinition): string {
+  if (def.k === 'res') {
+    change(p, def.res, def.n);
+    return `${def.n > 0 ? '+' : '−'}${Math.abs(def.n)} ${RES_NAME[def.res]}`;
+  }
+  if (def.k === 'toll') return toll(p, def.n);
+  if (def.k === 'hubrisToll') return p.hubris >= def.min ? `Nêmesis fiscaliza: ${toll(p, def.n)}` : '';
+  return '';
+}
+
+/**
+ * Percorre o caminho: aplica a passagem de cada casa intermediária, na ordem, e deixa o peão
+ * na última casa sem resolver a parada. A casa inicial não é ativada.
+ */
+export function walk(state: GameState, p: Player, path: number[]): MovementResult {
+  const result: MovementResult = { player: p.id, path: [...path], passedNodes: path.slice(0, -1), destination: path[path.length - 1], events: [] };
+  let region = NODES[p.pos].region;
+  path.forEach((id, i) => {
+    const node = NODES[id];
+    p.pos = id;
+    if (i < path.length - 1) {
+      for (const def of node.onPass) {
+        const text = passEffect(p, def);
+        if (text) result.events.push({ node: id, text });
+      }
+    }
+    // Bônus de relíquia de passagem vêm depois do efeito da casa.
+    if (node.region !== region && has(p, G.poseidon) && (p.used.trident ?? 0) < 2) {
+      p.used.trident = (p.used.trident ?? 0) + 1;
+      change(p, 'dracmas', 1);
+      result.events.push({ node: id, text: 'Tridente de Poseidon: +1 Dracma' });
+    }
+    region = node.region;
+  });
+  state.lastMove = result;
+  return result;
+}
+
+function judgement(state: GameState, p: Player): Op[] {
+  const id = p.id;
+  if (p.hubris <= 1) {
+    say(state, id, `Nêmesis nada tem contra ${p.name}.`);
+    return [];
+  }
+  say(state, id, `Nêmesis julga ${p.name} (Húbris ${p.hubris}).`);
+  if (arco(state, p)) return [];
+  if (p.hubris <= 3) return [{ t: 'res', p: id, res: 'dracmas', n: -2 }];
+  if (p.hubris >= 6 || p.dracmas < RULES.nemesisFine) return [{ t: 'jail', p: id }];
+  return [{
+    t: 'choice', p: id, prompt: 'Nêmesis exige reparação', options: [
+      { label: `Pagar ${RULES.nemesisFine} Dracmas`, ops: [{ t: 'res', p: id, res: 'dracmas', n: -RULES.nemesisFine }] },
+      { label: 'Ir ao Tártaro', ops: [{ t: 'jail', p: id }] },
+    ],
+  }];
+}
+
+/** Efeito de parada da casa onde o movimento terminou. */
 function land(state: GameState, p: Player): Op[] {
   const node = NODES[p.pos];
   const id = p.id;
-  switch (node.type) {
-    case 'comum':
-    case 'bifurcacao':
-    case 'tartaro':
-      return [];
-    case 'dracmas':
-      change(p, 'dracmas', RULES.houseDracmas);
-      say(state, id, `Casa de Dracmas: ${p.name} ganha ${RULES.houseDracmas} Dracmas.`);
-      return [];
-    case 'favor':
-      change(p, 'favor', RULES.houseFavor);
-      say(state, id, `Casa de Favor: ${p.name} ganha ${RULES.houseFavor} Favor.`);
-      return [];
-    case 'gloria':
-      change(p, 'gloria', RULES.houseGloria);
-      say(state, id, `Casa de Glória: ${p.name} ganha ${RULES.houseGloria} Glória.`);
-      return [];
-    case 'evento': {
-      const roll = d6(state);
-      const table: [string, Op[]][] = [
-        ['−2 Dracmas', [{ t: 'res', p: id, res: 'dracmas', n: -2 }]],
-        ['+1 Húbris', [{ t: 'res', p: id, res: 'hubris', n: 1 }]],
-        ['+2 Dracmas', [{ t: 'res', p: id, res: 'dracmas', n: 2 }]],
-        ['compra 1 carta', [{ t: 'draw', p: id, n: 1 }]],
-        ['+1 Favor', [{ t: 'res', p: id, res: 'favor', n: 1 }]],
-        ['+1 Glória', [{ t: 'res', p: id, res: 'gloria', n: 1 }]],
-      ];
-      say(state, id, `Evento: ${p.name} tira ${roll}: ${table[roll - 1][0]}.`);
-      if (roll <= 2 && arco(state, p)) return [];
-      return table[roll - 1][1];
-    }
-    case 'destino':
-      return [{ t: 'destiny', p: id }];
-    case 'nemesis': {
-      if (p.hubris <= 1) {
-        say(state, id, `Nêmesis nada tem contra ${p.name}.`);
-        return [];
+  const ops: Op[] = [];
+  for (const def of node.onStop) {
+    switch (def.k) {
+      case 'res':
+        change(p, def.res, def.n);
+        say(state, id, `Casa ${pad(node.id)}: ${p.name} ganha ${def.n} ${RES_NAME[def.res]}.`);
+        break;
+      case 'toll':
+        if (!arco(state, p)) say(state, id, `Pedágio divino na casa ${pad(node.id)}: ${p.name} ${toll(p, def.n)}.`);
+        break;
+      case 'hubrisToll':
+        break;
+      case 'roll': {
+        const roll = d6(state);
+        const row = TABLES[def.table][roll - 1];
+        say(state, id, `${def.table === 'provacao' ? 'Provação' : 'Evento'}: ${p.name} tira ${roll}: ${row.text}.`);
+        const negative = row.changes.some(([res, n]) => (res === 'hubris' ? n > 0 : n < 0));
+        if (negative && arco(state, p)) break;
+        for (const [res, n] of row.changes) change(p, res, n);
+        break;
       }
-      say(state, id, `Nêmesis julga ${p.name} (Húbris ${p.hubris}).`);
-      if (arco(state, p)) return [];
-      if (p.hubris <= 3) return [{ t: 'res', p: id, res: 'dracmas', n: -2 }];
-      if (p.hubris >= 6 || p.dracmas < RULES.nemesisFine) return [{ t: 'jail', p: id }];
-      return [{
-        t: 'choice', p: id, prompt: 'Nêmesis exige reparação', options: [
-          { label: `Pagar ${RULES.nemesisFine} Dracmas`, ops: [{ t: 'res', p: id, res: 'dracmas', n: -RULES.nemesisFine }] },
-          { label: 'Ir ao Tártaro', ops: [{ t: 'jail', p: id }] },
-        ],
-      }];
+      case 'treasure': {
+        const n = def.min + Math.floor(rand(state) * (def.max - def.min + 1));
+        change(p, 'dracmas', n);
+        say(state, id, `Tesouro: ${p.name} encontra ${n} Dracmas.`);
+        break;
+      }
+      case 'altar': {
+        if (p.dracmas < 1) break;
+        const bets = Array.from({ length: RULES.altarMaxBet }, (_, i) => i + 1);
+        ops.push({
+          t: 'choice', p: id, prompt: 'Altar: apostar Dracmas por Favor?', options: [
+            ...bets.map((bet) => ({ label: `Apostar ${bet} Dracma${bet > 1 ? 's' : ''}`, ops: [{ t: 'altar', p: id, bet } as Op], disabled: p.dracmas < bet })),
+            { label: 'Não apostar', ops: [] },
+          ],
+        });
+        break;
+      }
+      case 'destiny':
+        ops.push({ t: 'destiny', p: id });
+        break;
+      case 'judgement':
+        ops.push(...judgement(state, p));
+        break;
+      case 'temple': {
+        const god = GODS[node.region];
+        const cost = god.action.cost === 0 ? 'grátis' : `${god.action.cost} ${god.action.res === 'favor' ? 'Favores' : 'Dracmas'}`;
+        const options: ChoiceOption[] = [
+          { label: `${god.action.label} (${cost})`, ops: templeActionOps(node.region, id), disabled: !templeAffordable(p, node.region) },
+          { label: `Comprar ${god.relic.name} (${god.relic.price} Dracmas)`, ops: [{ t: 'buy', p: id, relic: node.region }], disabled: !relicAffordable(state, p, node.region) },
+          { label: 'Nenhuma ação', ops: [] },
+        ];
+        if (!(options[0].disabled && options[1].disabled)) ops.push({ t: 'choice', p: id, prompt: `Templo de ${god.name}`, options });
+        break;
+      }
+      case 'delphi':
+        ops.push({
+          t: 'choice', p: id, prompt: 'Delfos', options: [
+            { label: 'Ver 2 cartas do Destino (grátis)', ops: [{ t: 'peek', p: id, deck: 'destiny', n: 2, reorder: false }] },
+            { label: 'Pagar 2 Dracmas: +1 Favor', ops: [{ t: 'res', p: id, res: 'dracmas', n: -2 }, { t: 'res', p: id, res: 'favor', n: 1 }], disabled: p.dracmas < 2 },
+            { label: 'Pagar 3 Dracmas: comprar 2 e descartar 2', ops: [{ t: 'res', p: id, res: 'dracmas', n: -3 }, { t: 'draw', p: id, n: 2 }, { t: 'discard', p: id, n: 2 }], disabled: p.dracmas < 3 },
+          ],
+        });
+        break;
     }
-    case 'templo': {
-      const god = GODS[node.region];
-      const cost = god.action.cost === 0 ? 'grátis' : `${god.action.cost} ${god.action.res === 'favor' ? 'Favores' : 'Dracmas'}`;
-      const options: ChoiceOption[] = [
-        { label: `${god.action.label} (${cost})`, ops: templeActionOps(node.region, id), disabled: !templeAffordable(p, node.region) },
-        { label: `Comprar ${god.relic.name} (${god.relic.price} Dracmas)`, ops: [{ t: 'buy', p: id, relic: node.region }], disabled: !relicAffordable(state, p, node.region) },
-        { label: 'Nenhuma ação', ops: [] },
-      ];
-      if (options[0].disabled && options[1].disabled) return [];
-      return [{ t: 'choice', p: id, prompt: `Templo de ${god.name}`, options }];
-    }
-    case 'delfos':
-      return [{
-        t: 'choice', p: id, prompt: 'Delfos', options: [
-          { label: 'Ver 2 cartas do Destino (grátis)', ops: [{ t: 'peek', p: id, deck: 'destiny', n: 2, reorder: false }] },
-          { label: 'Pagar 2 Dracmas: +1 Favor', ops: [{ t: 'res', p: id, res: 'dracmas', n: -2 }, { t: 'res', p: id, res: 'favor', n: 1 }], disabled: p.dracmas < 2 },
-          { label: 'Pagar 3 Dracmas: comprar 2 e descartar 2', ops: [{ t: 'res', p: id, res: 'dracmas', n: -3 }, { t: 'draw', p: id, n: 2 }, { t: 'discard', p: id, n: 2 }], disabled: p.dracmas < 3 },
-        ],
-      }];
   }
+  return ops;
 }
 
 // ---------- fim de turno, rodada e eleição ----------
@@ -709,6 +763,15 @@ function exec(state: GameState, op: Op): Op[] | null {
       say(state, p.id, `${p.name} adquire ${relic.name}.`);
       return [];
     }
+    case 'altar': {
+      const p = P(op.p);
+      const bet = -change(p, 'dracmas', -op.bet);
+      const roll = d6(state);
+      const favor = ALTAR_FAVOR[roll - 1];
+      change(p, 'favor', favor);
+      say(state, p.id, `Altar: ${p.name} aposta ${bet} Dracma${bet > 1 ? 's' : ''} e tira ${roll}: ${favor ? `+${favor} Favor${favor > 1 ? 'es' : ''}` : 'perde a aposta'}.`);
+      return [];
+    }
     case 'log':
       say(state, op.p, op.text);
       return [];
@@ -762,23 +825,11 @@ export function apply(state: GameState, cmd: Command): void {
       if (!path) throw new Error('Destino inválido para esta carta.');
       if (mod !== 0) p.used.sandals = 1;
       discardCard(state, p, cmd.card);
-      let crossed = 0;
-      let region = NODES[p.pos].region;
-      for (const n of path) {
-        if (NODES[n].region !== region) crossed++;
-        region = NODES[n].region;
-      }
-      p.pos = cmd.dest;
+      const from = p.pos;
+      const move = walk(state, p, path);
       const node = NODES[p.pos];
-      say(state, p.id, `${p.name} descarta ${cardName(CARDS[cmd.card])} e anda ${path.length} até a casa ${String(node.id).padStart(2, '0')} (${GODS[node.region].name}).`);
-      if (has(p, G.poseidon) && crossed > 0) {
-        const gain = Math.min(crossed, 2 - (p.used.trident ?? 0));
-        if (gain > 0) {
-          p.used.trident = (p.used.trident ?? 0) + gain;
-          change(p, 'dracmas', gain);
-          say(state, p.id, `O Tridente de Poseidon rende ${gain} Dracma${gain > 1 ? 's' : ''}.`);
-        }
-      }
+      say(state, p.id, `${p.name} descarta ${cardName(CARDS[cmd.card])} e anda ${path.length} da casa ${pad(from)} até a ${pad(node.id)} (${GODS[node.region].name}).`);
+      if (move.events.length > 0) say(state, p.id, `No caminho: ${move.events.map((e) => `${e.text} (casa ${pad(e.node)})`).join('; ')}.`);
       state.queue = [{ t: 'land', p: p.id }, { t: 'encounter', p: p.id }, { t: 'endTurn' }];
       break;
     }
@@ -838,8 +889,14 @@ export function apply(state: GameState, cmd: Command): void {
 
 export const serialize = (state: GameState): string => JSON.stringify(state);
 
+/** Carrega uma partida salva, migrando versões anteriores. */
 export function deserialize(json: string): GameState {
   const state = JSON.parse(json) as GameState;
+  if (state.version === 1) {
+    // v1 → v2 (regras v1.6): as casas mudaram de efeito, mas IDs e ligações são os mesmos.
+    state.lastMove = null;
+    state.version = 2;
+  }
   if (state.version !== SAVE_VERSION) throw new Error(`Versão de partida salva incompatível: ${state.version}.`);
   return state;
 }

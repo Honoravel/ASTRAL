@@ -1,4 +1,4 @@
-import { HOUSE_INFO, NODES, SHORTCUTS } from '../engine/board';
+import { HOUSES, NODES, SHORTCUTS } from '../engine/board';
 import { GODS } from '../engine/data';
 import type { BoardNode, GameState } from '../engine/types';
 import { houseIcon } from './icons';
@@ -6,7 +6,8 @@ import { houseIcon } from './icons';
 export const PLAYER_COLORS = ['#f4e7c3', '#35a3b5', '#e8b923', '#c2416d'];
 export const ABBR = ['ZEU', 'HER', 'APO', 'ÁRT', 'ATE', 'ARE', 'HEF', 'DIO', 'HRM', 'DEM', 'AFR', 'POS'];
 
-const radiusOf = (n: BoardNode): number => (n.type === 'templo' ? 21 : 15);
+const radiusOf = (n: BoardNode): number => (n.type === 'templo' ? 21 : n.type === 'comum' ? 12 : n.type === 'delfos' || n.type === 'tartaro' ? 18 : 15);
+const BADGE: Partial<Record<BoardNode['type'], string>> = { dracmas: '+1', pedagio: '−1' };
 const pad = (id: number): string => String(id).padStart(2, '0');
 
 function link(a: BoardNode, b: BoardNode, cls: string): string {
@@ -46,16 +47,18 @@ function links(): string {
 function nodes(): string {
   let out = '';
   for (const n of NODES) {
-    const info = HOUSE_INFO[n.type];
+    const house = HOUSES[n.type];
     const god = GODS[n.region];
+    const r = radiusOf(n);
     const title =
       n.type === 'templo'
-        ? `Casa ${pad(n.id)} · Templo de ${god.name} — Ação: ${god.action.label}. Relíquia: ${god.relic.name}.`
-        : `Casa ${pad(n.id)} · ${info.name} (região de ${god.name}) — ${info.text}`;
+        ? `Casa ${pad(n.id)} · Templo de ${god.name} — Parada: ${god.action.label}, ou comprar ${god.relic.name}.`
+        : `Casa ${pad(n.id)} · ${house.name} (região de ${god.name}) — Passagem: ${house.pass || 'nenhum efeito'}. Parada: ${house.stop}`;
+    const badge = BADGE[n.type] ? `<g class="badge" transform="translate(12,-12)"><circle r="7"/><text y="3">${BADGE[n.type]}</text></g>` : '';
     const body =
       n.type === 'templo'
         ? `<circle r="21"/><circle class="ring" r="16.5"/><text class="abbr" y="4">${ABBR[n.region]}</text>`
-        : `<circle r="15"/>${n.type === 'comum' ? `<text class="num" y="4">${pad(n.id)}</text>` : houseIcon(n.type)}`;
+        : `<circle r="${r}"/>${n.type === 'comum' ? `<text class="num" y="3.5">${pad(n.id)}</text>` : houseIcon(n.type)}${badge}`;
     out += `<g class="node ${n.type}" data-node="${n.id}" transform="translate(${n.position.x},${n.position.y})"><title>${title}</title>${body}</g>`;
   }
   return out;

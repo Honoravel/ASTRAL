@@ -4,7 +4,7 @@ import { buildBoard, DIST, NODES, reach, SHORTCUTS, TARTARUS, templeOf } from '.
 import { CARDS } from '../src/engine/cards';
 import { G, GODS, SIGNS } from '../src/engine/data';
 import { DESTINIES } from '../src/engine/destiny';
-import { apply, costFor, deserialize, newGame, RULES, serialize } from '../src/engine/game';
+import { apply, costFor, deserialize, newGame, RULES, serialize, walk } from '../src/engine/game';
 import type { GameState, HouseType } from '../src/engine/types';
 
 const game = (n = 2, seed = 7): GameState =>
@@ -25,14 +25,16 @@ describe('tabuleiro', () => {
   it('tem 96 casas com as contagens da especificação', () => {
     const count = (t: HouseType) => NODES.filter((n) => n.type === t).length;
     expect(NODES).toHaveLength(96);
-    expect(['comum', 'dracmas', 'favor', 'gloria', 'evento', 'destino', 'nemesis', 'bifurcacao', 'templo', 'delfos', 'tartaro'].map((t) => count(t as HouseType)))
-      .toEqual([30, 12, 8, 8, 8, 6, 4, 6, 12, 1, 1]);
+    expect(['comum', 'dracmas', 'pedagio', 'favor', 'gloria', 'provacao', 'destino', 'nemesis', 'bifurcacao', 'templo', 'evento', 'altar', 'tesouro', 'delfos', 'tartaro'].map((t) => count(t as HouseType)))
+      .toEqual([12, 10, 8, 8, 6, 6, 6, 4, 6, 12, 6, 6, 4, 1, 1]);
+    expect(new Set(NODES.map((n) => n.id)).size).toBe(96);
+    for (const n of NODES) expect(Array.isArray(n.onPass) && Array.isArray(n.onStop)).toBe(true);
     for (let r = 0; r < 12; r++) expect(NODES[templeOf(r)].type).toBe('templo');
   });
 
   it('rejeita duplicações e lacunas na tabela de tipos', () => {
     const all = Array.from({ length: 96 }, (_, i) => i);
-    const base = { comum: all, dracmas: [], favor: [], gloria: [], evento: [], destino: [], nemesis: [], bifurcacao: [], templo: [], delfos: [], tartaro: [] };
+    const base = { comum: all };
     expect(() => buildBoard({ ...base, dracmas: [5] })).toThrow(/duplicada/);
     expect(() => buildBoard({ ...base, comum: all.slice(1) })).toThrow(/sem tipo/);
     expect(() => buildBoard({ ...base, favor: [96] })).toThrow(/fora do intervalo/);
@@ -118,14 +120,128 @@ describe('cartas', () => {
 });
 
 describe('turno e casas', () => {
-  it('casas atravessadas não ativam; só o destino final', () => {
+  it('aplica passagem em cada casa intermediária, em ordem, e só a parada na última', () => {
     const g = game();
     const p = g.players[0];
     p.pos = 0;
-    p.hand[0] = 1; // 2 de Paus: 2 passos, passa pela casa 01 (Dracmas) e para na 02 (Comum)
+    p.hand[0] = 1; // 2 passos: passa pela 01 (Dracmas, +1) e para na 02 (Comum)
     apply(g, { type: 'PLAY_CARD_MOVE', card: 1, dest: 2 });
+    expect(p.dracmas).toBe(RULES.startDracmas + 1);
+    expect(g.lastMove).toMatchObject({ path: [1, 2], passedNodes: [1], destination: 2 });
+
+    const h = game();
+    const q = h.players[0];
+    Object.assign(q, { pos: 56, dracmas: 3 });
+    q.hand[0] = 4; // 5 passos: 57 (Pedágio −1), 58 (Dracmas +1), 59, 60 (Pedágio −1), para na 61 (Favor +2)
+    apply(h, { type: 'PLAY_CARD_MOVE', card: 4, dest: 61 });
+    expect(q.dracmas).toBe(2);
+    expect(q.favor).toBe(RULES.startFavor + 2);
+    expect(h.lastMove!.events.map((e) => e.node)).toEqual([57, 58, 60]);
+  });
+
+  it('não ativa a casa inicial nem paga em dobro na parada', () => {
+    const g = game();
+    const p = g.players[0];
+    p.pos = 1; // começa numa casa de Dracmas: não recebe passagem
+    p.hand[0] = 0;
+    apply(g, { type: 'PLAY_CARD_MOVE', card: 0, dest: 2 });
     expect(p.dracmas).toBe(RULES.startDracmas);
+
+    const h = game();
+    h.players[0].pos = 0;
+    h.players[0].hand[0] = 0;
+    apply(h, { type: 'PLAY_CARD_MOVE', card: 0, dest: 1 }); // para em Dracmas: +2, não +1 e +2
+    expect(h.players[0].dracmas).toBe(RULES.startDracmas + 2);
+  });
+
+  it('cobra pedágio sem saldo: paga o que tiver e ganha 1 Húbris por casa', () => {
+    const g = game();
+    const p = g.players[0];
+    Object.assign(p, { pos: 41, dracmas: 0 });
+    p.hand[0] = 1; // passa pela 42 (Pedágio) e para no templo 43
+    apply(g, { type: 'PLAY_CARD_MOVE', card: 1, dest: 43 });
+    expect(p).toMatchObject({ dracmas: 0, hubris: 1 });
+
+    const h = game();
+    const q = h.players[0];
+    Object.assign(q, { pos: 46, dracmas: 1 });
+    q.hand[0] = 0; // para na 47 (Pedágio −2) com 1 Dracma
+    apply(h, { type: 'PLAY_CARD_MOVE', card: 0, dest: 47 });
+    expect(q).toMatchObject({ dracmas: 0, hubris: 1 });
+  });
+
+  it('Nêmesis fiscaliza na passagem só com Húbris 4+, sem prender', () => {
+    const pass = (hubris: number, dracmas: number) => {
+      const g = game();
+      const p = g.players[0];
+      Object.assign(p, { pos: 13, hubris, dracmas });
+      p.hand[0] = 1; // passa pela 14 (Nêmesis) e para na 15 (Glória)
+      apply(g, { type: 'PLAY_CARD_MOVE', card: 1, dest: 15 });
+      return p;
+    };
+    expect(pass(3, 5)).toMatchObject({ dracmas: 5, jailed: false });
+    expect(pass(4, 5)).toMatchObject({ dracmas: 4, hubris: 4, jailed: false });
+    expect(pass(6, 0)).toMatchObject({ dracmas: 0, hubris: 7, jailed: false, pos: 15 });
+  });
+
+  it('aplica a passagem de novo se a rota visitar a mesma casa duas vezes', () => {
+    const g = game();
+    const p = g.players[0];
+    p.pos = 0;
+    const move = walk(g, p, [1, 2, 1, 2]);
+    expect(p.dracmas).toBe(RULES.startDracmas + 2);
+    expect(move.events).toHaveLength(2);
+  });
+
+  it('teletransporte não ativa casas atravessadas nem o destino', () => {
+    const g = game();
+    const p = g.players[0];
+    Object.assign(p, { pos: 67, dracmas: 10 }); // Templo de Hermes
+    p.hand = [39, ...p.hand.filter((c) => c !== 39).slice(0, 5)]; // Cavaleiro de Espadas
+    apply(g, { type: 'PLAY_CARD_EFFECT', card: 39 });
+    expect(g.pending?.kind).toBe('dest');
+    const before = p.dracmas;
+    apply(g, { type: 'ANSWER', value: 40 });
+    expect(p.pos).toBe(40);
+    expect(p.dracmas).toBe(before);
     expect(g.current).toBe(1);
+  });
+
+  it('resolve Tesouro, Altar, Provação e Evento na parada', () => {
+    let g = game();
+    stepTo(g, 87); // 88: Tesouro
+    const gain = g.players[0].dracmas - RULES.startDracmas;
+    expect(gain).toBeGreaterThanOrEqual(RULES.treasureMin);
+    expect(gain).toBeLessThanOrEqual(RULES.treasureMax);
+
+    g = game();
+    stepTo(g, 88); // 89: Altar
+    expect(g.pending?.options?.map((o) => o.label)).toEqual(['Apostar 1 Dracma', 'Apostar 2 Dracmas', 'Apostar 3 Dracmas', 'Não apostar']);
+    apply(g, { type: 'ANSWER', value: 2 });
+    expect(g.players[0].dracmas).toBe(RULES.startDracmas - 3);
+    expect([0, 1, 2]).toContain(g.players[0].favor - RULES.startFavor);
+
+    for (const from of [76, 7]) { // 77: Provação; 08: Evento
+      g = game(2, from);
+      stepTo(g, from);
+      expect(g.current).toBe(1);
+      expect(g.pending).toBeNull();
+    }
+  });
+
+  it('condenação ao Tártaro encerra o turno sem quebrar o estado', () => {
+    const g = game();
+    const p = g.players[0];
+    Object.assign(p, { hubris: 6 });
+    stepTo(g, 13);
+    expect(p).toMatchObject({ jailed: true, pos: TARTARUS });
+    expect(g.current).toBe(1);
+    expect(g.phase).toBe('CHOOSE_ACTION');
+    expect(g.queue).toHaveLength(0);
+
+    const h = game();
+    stepTo(h, 51); // parar na casa 52 por movimento não prende
+    expect(h.players[0]).toMatchObject({ jailed: false, pos: TARTARUS });
   });
 
   it('recompõe a mão até 6 no início do turno', () => {
@@ -276,5 +392,17 @@ describe('propriedades', () => {
     for (const s of [g, copy]) for (let i = 0; i < 300 && s.phase !== 'GAME_OVER'; i++) aiStep(s);
     expect(copy.log).toEqual(g.log);
     expect(() => deserialize('{"version":0}')).toThrow();
+  });
+
+  it('migra partidas salvas na versão anterior', () => {
+    const g = game(2, 11);
+    const old = JSON.parse(serialize(g));
+    old.version = 1;
+    delete old.lastMove;
+    const migrated = deserialize(JSON.stringify(old));
+    expect(migrated.version).toBe(2);
+    expect(migrated.lastMove).toBeNull();
+    stepTo(migrated, 0);
+    expect(migrated.players[0].dracmas).toBe(RULES.startDracmas + 2);
   });
 });
