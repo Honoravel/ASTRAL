@@ -176,24 +176,29 @@ function planTrap(state: GameState, p: Player): { cmd: Command; bias: number } |
   return { cmd: { type: 'PLACE_TRAP', card, kind, node: best }, bias: TRAPS[kind].cost + 1.5 + bestScore + (rival.gloria >= state.goal - 5 ? 2 : 0) };
 }
 
-/** Executa uma única decisão da IA (para a interface poder animar passo a passo). */
-export function aiStep(state: GameState): void {
-  if (state.phase === 'GAME_OVER') return;
-  if (state.pending) {
-    apply(state, { type: 'ANSWER', value: autoAnswer(state) });
-    return;
-  }
+/** Política da IA. A padrão é a usada no jogo; as demais servem a experimentos de auditoria. */
+export interface AiPolicy {
+  /** Prêmio somado ao valor simulado de jogar uma carta pelo efeito. */
+  effectBias: number;
+  /** Peso da aproximação a templos onde as cartas da mão podem ser jogadas. */
+  approachWeight: number;
+}
+export const DEFAULT_POLICY: AiPolicy = { effectBias: 0, approachWeight: 1 };
+
+/** Escolhe o próximo comando da IA sem aplicá-lo. */
+export function aiChoose(state: GameState, policy: AiPolicy = DEFAULT_POLICY): Command {
+  if (state.pending) return { type: 'ANSWER', value: autoAnswer(state) };
   const p = currentPlayer(state);
   const free = freePowers(state);
-  if (free.includes('taca')) return apply(state, { type: 'FREE_POWER', power: 'taca' });
-  if (free.includes('raio') && (p.hubris <= 1 || p.gloria + 3 >= state.goal)) return apply(state, { type: 'FREE_POWER', power: 'raio' });
+  if (free.includes('taca')) return { type: 'FREE_POWER', power: 'taca' };
+  if (free.includes('raio') && (p.hubris <= 1 || p.gloria + 3 >= state.goal)) return { type: 'FREE_POWER', power: 'raio' };
 
   const options: { cmd: Command; bias: number }[] = [{ cmd: { type: 'END_TURN' }, bias: -3 }];
   for (const card of p.hand) {
     for (const dest of moveOptions(state, card).keys()) {
-      options.push({ cmd: { type: 'PLAY_CARD_MOVE', card, dest }, bias: approach(state, p, dest, card) - keepValue(p, card) * 0.25 });
+      options.push({ cmd: { type: 'PLAY_CARD_MOVE', card, dest }, bias: approach(state, p, dest, card) * policy.approachWeight - keepValue(p, card) * 0.25 });
     }
-    if (canEffect(state, card)) options.push({ cmd: { type: 'PLAY_CARD_EFFECT', card }, bias: placeAllows(p, CARDS[card]) && CARDS[card].use !== 'U' ? 1 : 0 });
+    if (canEffect(state, card)) options.push({ cmd: { type: 'PLAY_CARD_EFFECT', card }, bias: (placeAllows(p, CARDS[card]) && CARDS[card].use !== 'U' ? 1 : 0) + policy.effectBias });
   }
   if (canBuyRelic(state)) options.push({ cmd: { type: 'BUY_RELIC' }, bias: 0 });
   const trap = planTrap(state, p);
@@ -205,5 +210,11 @@ export function aiStep(state: GameState): void {
     const v = simulate(state, o.cmd) + o.bias;
     if (v > bestValue) [best, bestValue] = [o.cmd, v];
   }
-  apply(state, best);
+  return best;
+}
+
+/** Executa uma única decisão da IA (para a interface poder animar passo a passo). */
+export function aiStep(state: GameState, policy: AiPolicy = DEFAULT_POLICY): void {
+  if (state.phase === 'GAME_OVER') return;
+  apply(state, aiChoose(state, policy));
 }

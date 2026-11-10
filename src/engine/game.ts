@@ -43,6 +43,14 @@ export function newGame(configs: PlayerConfig[], seed: number = Date.now() | 0):
   return state;
 }
 
+// ---------- telemetria (só observação; não altera regras) ----------
+
+/** Gancho opcional para auditorias. As simulações internas da IA não emitem eventos. */
+export const telemetry: { emit: ((event: string, data: Record<string, number | string>) => void) | null } = { emit: null };
+function tell(state: GameState, event: string, data: Record<string, number | string>): void {
+  if (telemetry.emit && !state.sim) telemetry.emit(event, data);
+}
+
 // ---------- utilitários ----------
 
 export const currentPlayer = (state: GameState): Player => state.players[state.current];
@@ -116,6 +124,7 @@ function drawCards(state: GameState, p: Player, n: number): void {
     ensure(state, 'minor', 1);
     if (state.deck.length === 0) return;
     p.hand.push(state.deck.pop()!);
+    tell(state, 'draw', { player: p.id, card: p.hand[p.hand.length - 1] });
   }
 }
 
@@ -132,6 +141,7 @@ function jail(state: GameState, p: Player): void {
   p.jailed = true;
   p.pos = TARTARUS;
   state.stats.jails[p.id]++;
+  tell(state, 'jail', { player: p.id });
   say(state, p.id, `${p.name} é lançado ao Tártaro.`);
 }
 
@@ -368,13 +378,15 @@ export function templeOptions(state: GameState, p: Player, region: number): Choi
 /** Paga o custo, descarta a carta e devolve os passos do efeito. */
 function playEffect(state: GameState, p: Player, cardId: number): Op[] {
   const card = CARDS[cardId];
-  change(p, 'dracmas', -costFor(p, card, state));
+  const costForPaid = costFor(p, card, state);
+  change(p, 'dracmas', -costForPaid);
   if (event(state, EV.atena) && card.suit === 'Espadas') p.used.atena = 1;
   if (p.divineDiscount && card.use === 'D') p.divineDiscount = false;
   else if (martelo(p, card)) p.used.martelo = 1;
   else p.discountNext = false;
   discardCard(state, p, cardId);
   state.stats.effects++;
+  tell(state, 'effect', { player: p.id, card: cardId, cost: costForPaid });
   say(state, p.id, `${p.name} joga ${cardName(card)}: ${card.text}`);
   return effectOps(cardId, p.id);
 }
@@ -466,6 +478,7 @@ function springTrap(state: GameState, p: Player, node: number, result: MovementR
     drawCards(state, p, 1);
   }
   state.lastTrap = { seq: ++state.trapSeq, node, kind: trap.kind, owner: trap.owner, victim: p.id };
+  tell(state, 'trap_hit', { owner: trap.owner, victim: p.id, kind: trap.kind, node });
   result.events.push({ node, text: `armadilha de ${state.players[trap.owner].name}, ${def.name}: ${def.text.toLowerCase()}` });
 }
 
@@ -635,6 +648,7 @@ function election(state: GameState): void {
   const tally = state.players.map((p) => `${p.name} ${votes(p)}`).join(', ');
   state.oracle = { holder: tied ? null : first.id, weaveUsed: false, protectUsed: false };
   state.elections.push({ round: state.round, winner: tied ? null : first.id, votes: state.players.map(votes) });
+  tell(state, 'election', { winner: tied ? -1 : first.id, round: state.round });
   for (const p of state.players) p.decree = false; // a proteção política vale até a eleição
   const spend = (): void => state.players.forEach((p) => change(p, 'favor', -Math.floor(p.favor * RULES.electionFavorLoss)));
   if (tied) {
@@ -658,6 +672,7 @@ function revealEvent(state: GameState): void {
 
 /** Fim da rodada completa, na ordem da seção 9.4 da v1.9. */
 function roundEnd(state: GameState): void {
+  tell(state, 'round_end', { round: state.round });
   // 1. Pagamentos de investimentos (inclusive para quem está preso).
   for (const p of state.players) {
     for (const inv of p.investments) {
@@ -746,6 +761,7 @@ function exec(state: GameState, op: Op): Op[] | null {
         const victim = P(id);
         P(op.p).sabDone = true;
         victim.used.sabIn = (victim.used.sabIn ?? 0) + 1;
+        tell(state, 'sabotage', { by: op.p, victim: id, kind: op.sab, blocked: op.sab === 'politica' && victim.decree ? 1 : 0 });
         if (op.sab === 'politica' && victim.decree) {
           victim.decree = false;
           say(state, id, `O Decreto de Zeus protege ${victim.name} da sabotagem política.`);
@@ -939,6 +955,7 @@ function exec(state: GameState, op: Op): Op[] | null {
       const id = state.destiny.pop()!;
       state.destinyDiscard.push(id);
       state.lastDestiny = id;
+      tell(state, 'destiny', { id, player: op.p });
       const d = DESTINIES[id];
       say(state, op.p, `Destino revelado: ${d.numeral} · ${d.name}. ${d.text}`);
       const h = state.oracle.holder;
@@ -1006,6 +1023,7 @@ function exec(state: GameState, op: Op): Op[] | null {
         }
       } else if (fa > fd) result = `${a.name} vence e toma ${change(a, 'dracmas', -change(d, 'dracmas', -RULES.duelPrize))} Dracmas.`;
       else if (fd > fa) result = `${d.name} vence e recebe ${change(d, 'favor', -change(a, 'favor', -1))} Favor.`;
+      tell(state, 'duel', { a: a.id, d: d.id, winner: fa > fd ? a.id : fd > fa ? d.id : -1, stake: op.stake ?? 'dracmas' });
       if (fa !== fd) {
         const winner = fa > fd ? a : d;
         if (event(state, EV.ares)) change(winner, 'dracmas', RULES.eventBonus);
@@ -1056,6 +1074,7 @@ function exec(state: GameState, op: Op): Op[] | null {
     }
     case 'invest': {
       const p = P(op.p);
+      tell(state, 'invest', { player: p.id, kind: op.kind });
       p.investments.push(op.kind === 'forge'
         ? { kind: 'forge', incomePerRound: RULES.forgeYield, remainingRounds: RULES.forgeRounds, received: 0 }
         : { kind: 'harvest', incomePerRound: RULES.harvestYield, remainingRounds: RULES.harvestRounds, received: 0 });
@@ -1139,6 +1158,7 @@ function exec(state: GameState, op: Op): Op[] | null {
       change(p, 'dracmas', -relic.price);
       state.stock[op.relic] = false;
       p.relics.push(op.relic);
+      tell(state, 'relic', { player: p.id, relic: op.relic });
       say(state, p.id, `${p.name} adquire ${relic.name}.`);
       return [];
     }
@@ -1158,6 +1178,7 @@ function exec(state: GameState, op: Op): Op[] | null {
       const ending = P(state.current);
       // A mão volta a seis cartas ao fim da ação.
       if (ending.hand.length > RULES.hand) return [{ t: 'discard', p: ending.id, n: ending.hand.length - RULES.hand }, { t: 'endTurn' }];
+      tell(state, 'turn_end', { player: ending.id });
       if (victory(state)) return [];
       ending.blocked = false;
       if (!ending.jailed && ending.hubris >= RULES.wrathHubris) {
@@ -1267,6 +1288,7 @@ export function apply(state: GameState, cmd: Command): void {
       // Uma casa comporta uma armadilha: a nova substitui a anterior, sem revelar se havia outra.
       state.traps = state.traps.filter((t) => t.node !== cmd.node);
       state.traps.push({ id: ++state.trapSeq, owner: p.id, node: cmd.node, kind: cmd.kind, expiresAtRound: state.round + RULES.trapRounds });
+      tell(state, 'trap_set', { player: p.id, card: cmd.card, kind: cmd.kind, node: cmd.node });
       say(state, p.id, `${p.name} descarta ${cardName(CARDS[cmd.card])} e arma uma armadilha em segredo.`);
       state.queue = [{ t: 'endTurn' }];
       break;
